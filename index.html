@@ -2629,12 +2629,12 @@ function lbLock(on){ lbPending=on; for(const id of ['againBtn','overMenuBtn','ne
 (async()=>{ try{ if(window.claude && window.claude.use){ lbDb=await window.claude.use('db'); lbShared=!!lbDb||(SB_URL&&SB_KEY?true:false); } }catch(e){ lbDb=null; } })();
 const LB_SIZE=10;
 // ---- online leaderboard (Supabase). Fill these two in to share one board between every player. ----
-const SB_URL='';   // e.g. 'https://abcdefgh.supabase.co'
-const SB_KEY='';   // the project's public "anon" / "publishable" key (safe to put in a web page)
+const SB_URL='https://ylpctrfeagyaetnpytak.supabase.co';   // e.g. 'https://abcdefgh.supabase.co'
+const SB_KEY='sb_publishable_5gTNWG5m4epY3JzIutBuRw_FVfmw8VH';   // the project's public "anon" / "publishable" key (safe to put in a web page)
 const sbOn=()=>!!(SB_URL && SB_KEY);
 async function sbFetch(path,opts){
   const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),7000);
-  try{ const r=await fetch(SB_URL.replace(/\/+$/,'')+path,Object.assign({signal:ctl.signal},opts||{},{headers:Object.assign({apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},(opts&&opts.headers)||{})}));
+  try{ const r=await fetch(SB_URL.replace(/\/+$/,'')+path,Object.assign({signal:ctl.signal},opts||{},{headers:Object.assign({apikey:SB_KEY,'Content-Type':'application/json'},SB_KEY.startsWith('sb_')?{}:{Authorization:'Bearer '+SB_KEY},(opts&&opts.headers)||{})}));
     if(!r.ok) throw new Error('sb '+r.status); return r.status===204?null:await r.json(); }
   finally{ clearTimeout(tm); }
 }
