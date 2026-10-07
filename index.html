@@ -2626,12 +2626,28 @@ function die(cause,line){
 let lbDb=null, lbShared=false, lbReadOnly=false, lbPending=false;
 // while a top-10 name is waiting to be saved, the buttons that start another run stay locked
 function lbLock(on){ lbPending=on; for(const id of ['againBtn','overMenuBtn','nextBtn']){ const b=$(id); if(b) b.disabled=on; } }
-(async()=>{ try{ if(window.claude && window.claude.use){ lbDb=await window.claude.use('db'); lbShared=!!lbDb; } }catch(e){ lbDb=null; } })();
+(async()=>{ try{ if(window.claude && window.claude.use){ lbDb=await window.claude.use('db'); lbShared=!!lbDb||(SB_URL&&SB_KEY?true:false); } }catch(e){ lbDb=null; } })();
 const LB_SIZE=10;
+// ---- online leaderboard (Supabase). Fill these two in to share one board between every player. ----
+const SB_URL='';   // e.g. 'https://abcdefgh.supabase.co'
+const SB_KEY='';   // the project's public "anon" / "publishable" key (safe to put in a web page)
+const sbOn=()=>!!(SB_URL && SB_KEY);
+async function sbFetch(path,opts){
+  const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),7000);
+  try{ const r=await fetch(SB_URL.replace(/\/+$/,'')+path,Object.assign({signal:ctl.signal},opts||{},{headers:Object.assign({apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},(opts&&opts.headers)||{})}));
+    if(!r.ok) throw new Error('sb '+r.status); return r.status===204?null:await r.json(); }
+  finally{ clearTimeout(tm); }
+}
+if(sbOn()) lbShared=true;
 const lbKey=name=>name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'player';
 function lbLocal(){ try{ return JSON.parse(localStorage.getItem('stardust.lb')||'[]'); }catch(e){ return []; } }
 function lbLocalSave(list){ try{ localStorage.setItem('stardust.lb',JSON.stringify(list)); }catch(e){} }
 async function lbTop(){
+  if(sbOn()){
+    try{ const rows=await sbFetch('/rest/v1/leaderboard?select=name,score&order=score.desc&limit='+LB_SIZE);
+      return (rows||[]).filter(d=>d && typeof d.score==='number' && typeof d.name==='string'); }
+    catch(e){ /* offline or not set up: fall back below */ }
+  }
   if(lbDb){
     try{ const snap=await lbDb.collection('leaderboard').orderBy('score','desc').limit(LB_SIZE).get();
       return snap.docs.map(d=>d.data()).filter(d=>d && typeof d.score==='number' && typeof d.name==='string'); }
@@ -2642,6 +2658,11 @@ async function lbTop(){
 // returns {ok, kept?: previous best when it was higher}
 async function lbSubmit(name,score){
   const id=lbKey(name);
+  if(sbOn()){
+    try{ const prev=await sbFetch('/rest/v1/rpc/submit_score',{method:'POST',body:JSON.stringify({p_id:id,p_name:name.slice(0,24),p_score:Math.round(score)})});
+      return (typeof prev==='number' && prev>=score) ? {ok:true, kept:prev} : {ok:true}; }
+    catch(e){ /* fall back below */ }
+  }
   if(lbDb && !lbReadOnly){
     try{
       const ref=lbDb.doc('leaderboard/'+id), cur=await ref.get();
