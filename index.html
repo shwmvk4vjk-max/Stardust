@@ -474,7 +474,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 33</div>
+  <div class="build">Build 34</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -1423,7 +1423,7 @@ function startLevel(i){
   objs=[]; cloudClock=3; worldR=P.r; P.vx=0; P.vy=0; P.recover=1.5; spawnBudget=SPAWN_BURST; freeSpawns=0;
   const vh = viewHalfDiag();
   let guard=0;
-  while(objs.length<TARGET_OBJS && guard++<3000){
+  while(objs.length<tgtObjs() && guard++<3000){
     const a=Math.random()*TAU, d=rnd(P.r*6, vh*1.5);
     const ratio = sampleRatio();
     if(ratio>1.1 && d < Math.max(vh*.9+ratio*P.r, ratio*P.r*BIG_WELL+P.r*2)) continue;      // no danger right at the start, and no gravity tugging you before you've moved
@@ -1445,8 +1445,16 @@ function startLevel(i){
   }
 }
 
+// Levels 1, 2 and 6: 30% more edible (green-ring) food, added on top; specks and dangerous bodies stay the same
+const FOOD_BOOST={0:1.3, 1:1.3, 5:1.3};
+const EDIBLE_SHARE=.71;   // share of spawns that are edible food (the .15-.86 band below)
+function foodBoost(){ return tut?1:(FOOD_BOOST[lvl]||1); }
+function tgtObjs(){ return Math.round(TARGET_OBJS*(1+EDIBLE_SHARE*(foodBoost()-1))); }
 function sampleRatio(){
   let u=Math.random();
+  const fb=foodBoost();
+  if(fb>1 && LEVELS[lvl].event!=='bombardment'){ const n=1+EDIBLE_SHARE*(fb-1), pS=.15/n, pF=EDIBLE_SHARE*fb/n;   // specks / edible food / the rest
+    u = u<pS ? u/pS*.15 : (u<pS+pF ? .15+(u-pS)/pF*EDIBLE_SHARE : .86+(u-pS-pF)/(1-pS-pF)*.14); }
   if(tut){ if(u<.86) return rnd(.12,.6); if(u<.95) return rnd(.86,1.1); return rnd(1.6,2.6); }   // tutorial: mostly food
   // specks and crumbs keep space busy without feeding you too fast; a few giants to steer around
   if(LEVELS[lvl] && LEVELS[lvl].event==='bombardment'){
@@ -1990,7 +1998,7 @@ function finishTutorial(done){
 }
 function tutPopulate(){
   const vh=viewHalfDiag(); let guard=0;
-  while(objs.length<TARGET_OBJS && guard++<3000){
+  while(objs.length<tgtObjs() && guard++<3000){
     const a=Math.random()*TAU, d=rnd(P.r*5, vh*1.5), ratio=sampleRatio();
     if(ratio>1.1 && d<vh*.9+ratio*P.r*BIG_WELL) continue;
     spawnObj(P.x+Math.cos(a)*d, P.y+Math.sin(a)*d, ratio);
@@ -3209,7 +3217,7 @@ function update(dt){
   if(tut && tut.empty) objs=objs.filter(o=>o.tut);   // tutorial: nothing else in space yet
   if(state==='play' && !(tut && tut.empty)){
     spawnBudget=Math.min(SPAWN_BURST, spawnBudget+dt*SPAWN_RATE);
-    while(objs.length<TARGET_OBJS && (freeSpawns>=1 || spawnBudget>=1)){
+    while(objs.length<tgtObjs() && (freeSpawns>=1 || spawnBudget>=1)){
       if(freeSpawns>=1) freeSpawns--; else spawnBudget--;
       // spawn safely beyond the screen corners, and beyond where the view will be once the camera finishes pulling back
       const vhFar=Math.min(vh*1.5, Math.max(vh, Math.hypot(W,H)/2/(Math.min(W,H)*.052/P.r)));
@@ -4885,8 +4893,10 @@ function draw(){
       else if(ratio<=1.15){ col='255,215,94'; a=.7; }
       else { col='255,93,93'; const dd=Math.hypot(o.x-P.x,o.y-P.y), near=dd/(o.r*4); a=.5+.4*Math.max(0,1-near)*(.6+.4*Math.sin(t*10));
         if(dd<o.r*BIG_WELL){ ctx.save(); ctx.setLineDash([4,8]); ctx.strokeStyle='rgba(255,93,93,'+(.1+.12*(1-dd/(o.r*BIG_WELL))).toFixed(2)+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(sx,sy,sr*BIG_WELL,0,TAU); ctx.stroke(); ctx.restore(); } }
-      if(!ringsOff || tut){ ctx.strokeStyle='rgba('+col+','+a.toFixed(2)+')'; ctx.lineWidth=Math.max(1,Math.min(3,sr*.07));
-        ctx.beginPath(); ctx.arc(sx,sy,sr*1.18+1.5,0,TAU); ctx.stroke(); }
+      if(!ringsOff || tut){ const star=o.spr && o.spr.width===160, lw=Math.max(1,Math.min(3,sr*.07)), rr=star?sr*1.42+4:sr*1.18+1.5;
+        if(star){ ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=lw+3; ctx.beginPath(); ctx.arc(sx,sy,rr,0,TAU); ctx.stroke(); }   // suns: ring sits past the glow, on a dark outline
+        ctx.strokeStyle='rgba('+col+','+(star?Math.max(a,.75):a).toFixed(2)+')'; ctx.lineWidth=star?lw+1:lw;
+        ctx.beginPath(); ctx.arc(sx,sy,rr,0,TAU); ctx.stroke(); }
     }
   }
 
