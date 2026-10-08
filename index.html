@@ -31,9 +31,9 @@
   --ui:"Chakra Petch", "Segoe UI", system-ui, sans-serif;
 }
 [hidden]{display:none!important;}
-html,body{height:100%;margin:0;overflow:hidden;background:var(--void);color:var(--ink);font-family:var(--ui);}
+html,body{height:100%;min-height:100lvh;margin:0;overflow:hidden;background:var(--void);color:var(--ink);font-family:var(--ui);}
 body{position:fixed;inset:0;width:auto;max-width:100%;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
-#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;}
+#c{position:fixed;top:0;left:0;right:auto;bottom:auto;width:100vw;height:100vh;height:100lvh;display:block;touch-action:none;cursor:crosshair;}
 
 .hud{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
   padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 0;pointer-events:none;}
@@ -839,6 +839,7 @@ function tuneQuality(ms){
   else if(fastT>8000 && QUALITY<2){ QUALITY++; fastT=0; resize(); }
 }
 function resize(){
+  if(!cv) return;
   DPR = Math.min(2, window.devicePixelRatio || 1)*Q_SCALE[QUALITY];
   W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
@@ -5032,6 +5033,7 @@ let slowMoT=0, slowMoK=1, hitStop=0;
 function slowMo(sec,k){ slowMoT=Math.max(slowMoT,sec); slowMoK=k; }
 let last=performance.now();
 function frame(now){
+  if(cv.clientWidth && (Math.abs(cv.clientWidth-W)>1 || Math.abs(cv.clientHeight-H)>1)) resize();   // caught a size change late: re-measure so nothing stretches
   requestAnimationFrame(frame);   // keep the loop alive even if a frame throws
   const rawMs=now-last; last=now;
   slowMoT=Math.max(0,slowMoT-rawMs/1000);
@@ -5303,6 +5305,12 @@ function setupMenu(){
 
 resize();
 addEventListener('resize',resize);
+// phones: the screen size settles a moment after rotating, so measure again a few times (stops the stretched look)
+function resizeSoon(){ resize(); for(const ms of [60,200,450,900]) setTimeout(resize,ms); }
+addEventListener('orientationchange',resizeSoon);
+if(window.visualViewport) visualViewport.addEventListener('resize',resizeSoon);
+if(window.ResizeObserver) new ResizeObserver(()=>{ if(cv.clientWidth!==W || cv.clientHeight!==H) resize(); }).observe(cv);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) resizeSoon(); });
 buildSprites(); useFoodImages();
 buildPlanetSprites();
 setupMenu();
