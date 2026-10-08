@@ -814,7 +814,7 @@ let W=0,H=0,DPR=1;
 let stars=[], nebula=null, lvl=0;
 // Adaptive quality: if the game can't keep up, it quietly lowers the drawing resolution and trims costly effects;
 // when things run smoothly again it steps back up. QUALITY 2 = full, 1 = reduced, 0 = low.
-let QUALITY=2, fpsEma=16.7, slowT=0, fastT=0;
+let QUALITY=2, fpsEma=16.7, slowT=0, fastT=0, qDrops=0;
 // Graphics setting: 'auto' lets the game adapt; high / medium / low pin the quality and stop it changing.
 const GFX_MODES=['auto','high','medium','low'], GFX_Q={high:2,medium:1,low:0}, GFX_NAME={auto:'Auto',high:'High',medium:'Medium',low:'Low'};
 let GFX_MODE=(()=>{ try{ const m=localStorage.getItem('stardust.quality'); return GFX_MODES.includes(m)?m:'auto'; }catch(e){ return 'auto'; } })();
@@ -835,15 +835,16 @@ function tuneQuality(ms){
   if(state!=='play' && state!=='event') return;
   fpsEma+=(ms-fpsEma)*.08;
   if(fpsEma>22){ slowT+=ms; fastT=0; } else if(fpsEma<18.5){ fastT+=ms; slowT=0; } else { slowT=Math.max(0,slowT-ms); fastT=Math.max(0,fastT-ms); }
-  if(slowT>1500 && QUALITY>0){ QUALITY--; slowT=0; fpsEma=16.7; resize(); }
-  else if(fastT>8000 && QUALITY<2){ QUALITY++; fastT=0; resize(); }
+  if(slowT>1500 && QUALITY>0){ QUALITY--; qDrops++; slowT=0; fastT=0; fpsEma=16.7; resize(); }
+  else if(fastT>(qDrops>=2?60000:20000) && QUALITY<2){ QUALITY++; fastT=0; resize(); }   // climb back slowly, and hardly at all once it has had to drop twice
 }
 function resize(){
   if(!cv) return;
   DPR = Math.min(2, window.devicePixelRatio || 1)*Q_SCALE[QUALITY];
+  const W0=W, H0=H;
   W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
-  makeStars(); makeNebula(); makeVignette();
+  if(W!==W0 || H!==H0 || !stars || !stars.length){ makeStars(); makeNebula(); makeVignette(); }
 }
 let vignette=null;
 function makeVignette(){
@@ -973,6 +974,12 @@ function drawClouds(front){
   const bw=Math.max(2,Math.round(W*CLOUD_RES)), bh=Math.max(2,Math.round(H*CLOUD_RES));
   let buf=cloudBuf[key];
   if(!buf || buf.width!==bw || buf.height!==bh){ buf=cloudBuf[key]=document.createElement('canvas'); buf.width=bw; buf.height=bh; }
+  // repainting ~20 screen-sized soft puffs is the expensive part, so reuse last frame's buffer while the view hasn't moved a buffer pixel
+  const ev0=LEVELS[lvl].event, animated=!front && (ev0==='death'||ev0==='race'||ev0==='core'||['bloom','ripples','dense'].includes(theme().amb));
+  const mk=Math.round(bgOff.x*CLOUD_RES*2)+','+Math.round(bgOff.y*CLOUD_RES*2)+','+bw+','+bh+','+lvl;
+  cloudFrame=(cloudFrame+1)%3;
+  if(buf._k===mk && !(animated && cloudFrame===0)){ if(buf._any){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.drawImage(buf,0,0,W,H); ctx.restore(); } return; }
+  buf._k=mk;
   const g=buf.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,bw,bh);
   g.scale(CLOUD_RES,CLOUD_RES); g.globalCompositeOperation='lighter';
   let any=false;
@@ -990,9 +997,11 @@ function drawClouds(front){
       g.drawImage(p.img,x-e,y-e,e*2,e*2); any=true;
     }
   }
+  buf._any=any;
   if(!any) return;
   ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.drawImage(buf,0,0,W,H); ctx.restore();
 }
+let cloudFrame=0;
 function trackCamera(){
   if(lastCam && lastCam.l===lvl){ bgOff.x+=(cam.x-lastCam.x)*cam.z; bgOff.y+=(cam.y-lastCam.y)*cam.z; }
   lastCam={x:cam.x,y:cam.y,l:lvl};
@@ -4403,7 +4412,9 @@ function drawPowerFx(sx,sy,sr){
 }
 function drawPlayer(sx,sy,sr){
   const f=compFrac(), aura=auraRGB(f), st=STAGES[formIdx];
-  if(P.surfStage!==formIdx || (P.dirty && t-P.renderT>.7)){ P.dirty=false; P.renderT=t; renderSurface(); }
+  // the drawn surface only matters for forms without a hand-made image; with an image it's built once per form, not every time you eat
+  if(P.surfStage!==formIdx || (P.dirty && t-P.renderT>.7 && !formImage())){ P.dirty=false; P.renderT=t; renderSurface(); }
+  else if(P.dirty && formImage()) P.dirty=false;
   const e=1-P.pop, R=sr*(1+.28*Math.sin(e*Math.PI)*(P.pop>0?1:0));
   ctx.globalCompositeOperation='lighter';
   const ag=ctx.createRadialGradient(sx,sy,R*.7,sx,sy,R*3);
