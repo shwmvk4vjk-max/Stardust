@@ -483,7 +483,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 37</div>
+  <div class="build">Build 38</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -619,7 +619,7 @@ const POWERS=[
   {id:'sling',    tier:3, ico:'↻', name:'Slingshot Master',max:1, desc:'Big bodies pull on you 60% weaker.'},
   {id:'luck',     tier:3, ico:'✧', name:'Lucky Star',      max:3, desc:'Rare cards show up more often, and gold and diamonds are 3× as common.'},
   {id:'kilonova', tier:4, ico:'✦', name:'Kilonova Blessing',max:1, desc:'Gives you a Kilonova button: a golden blast turns everything on screen to dust, then pulls it all into you. Recharges in 40 s.'},
-  {id:'halo',     tier:4, ico:'◌', name:'Dark Matter Halo',max:1, desc:'Your pull reaches 40% farther.'},
+  {id:'halo',     tier:4, ico:'◌', name:'Dark Matter Halo',max:1, desc:'Your pull reaches 40% farther, and all edible food on screen homes in on you like comets.'},
   {id:'wormhole', tier:4, ico:'⊛', name:'Wormhole',        max:1, desc:'Every 12 s a portal pours food out next to you. Once per level, it warps you away from a body that would crush you.'},
 ];
 const SYNERGIES=[
@@ -3218,7 +3218,7 @@ function update(dt){
     const n=lvl===4 ? 1 : 1+Math.round(2*(1-lvlT/L.dur));   // Level 5: only one rock hunts you at a time
     big.slice(0,n).forEach(a=>a[0].hunter=true);
   }
-  const pr=P.r, pullR=pr*PULL*pullMul(), pullG=G;
+  const pr=P.r, pullR=pr*PULL*pullMul(), pullG=G, haloVH=viewHalfDiag()*1.05;
   let gx=0, gy=0;   // combined tug from all bigger bodies this frame
   for(const o of objs){
     if(o.dead) continue;
@@ -3281,6 +3281,11 @@ function update(dt){
     if(o.anchor && ratio<=1.15) o.anchor=false;   // only bodies bigger than you stay put; once you outgrow one, your gravity can move it
     if(o.fixed||o.anchor){ o.vx=0; o.vy=0; }
     if(o.treasure && P.alive){ treasureFlee(o,dt); }
+    // Dark Matter Halo: every edible body on screen steers toward you like a homing comet
+    if(PU.halo && P.alive && active() && !o.comet && !o.gas && !o.kind && !o.treasure && !o.host && !o.flung && o.r<pr*.82){
+      const dx=P.x-o.x, dy=P.y-o.y, d=Math.hypot(dx,dy)||1;
+      if(d<haloVH){ const sp=Math.max(pr*2.6,Math.min(Math.hypot(o.vx,o.vy),pr*4)), k=Math.min(1,dt*.7); o.vx+=(dx/d*sp-o.vx)*k; o.vy+=(dy/d*sp-o.vy)*k; o.halo=true; }
+    }
     if(o.comet && P.alive){
       if(t-o.cometT>14){ o.comet=false; o.keep=false; }       // stragglers become normal ice after a while
       else { const dx=P.x-o.x, dy=P.y-o.y, d=Math.hypot(dx,dy)||1, sp=Math.max(P.r*9,Math.hypot(o.vx,o.vy)), k=Math.min(1,dt*2.2);
