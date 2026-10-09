@@ -483,7 +483,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 36</div>
+  <div class="build">Build 37</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -758,7 +758,7 @@ const LEVELS = [
   },
   { name:'Galactic Core', event:'core', dur:100, goalKg:8.6e36, minGrowth:0, foodMul:.35,
     clockLabel:'until the core pulls you in',
-    intro:'A supermassive black hole sits at the heart of the galaxy. Outgrow it, then merge.',
+    intro:'ENDLESS: survive as long as you can. Every 30 seconds it gets harder. Outgrow the core to devour it, and a bigger one awakens.',
     warn30:'The core\'s pull is tightening', winToast:'Merger',
     mats:{silicate:.4, iron:.2, ice:.3},
     star:{fx:.5, fy:-.6, rgb:'255,240,220'},
@@ -1451,9 +1451,36 @@ function startLevel(i){
     const m=Math.max(L.goalKg, lvlStartKg*300)/KG_PER_UNIT, r=Math.cbrt(m), a=Math.random()*TAU, d=vh*1.6+r*3;
     objs.push({x:P.x+Math.cos(a)*d,y:P.y+Math.sin(a)*d,vx:0,vy:0,r,m,mat:'silicate',kind:'smbh',keep:true,seed:0,born:t});
     goalKg=kg(m);
+    endless={wave:0, t:0, cores:0};
   }
 }
 
+// ---- Level 9 is endless: every 30 seconds a new wave makes the galaxy harder ----
+const WAVE_SECS=30;
+let endless={wave:0, t:0, cores:0};
+const isEndless=()=>LEVELS[lvl] && LEVELS[lvl].event==='core';
+const waveK=()=>isEndless()?endless.wave:0;
+const WAVE_MSG=['','More giants drift in','The core feeds faster','Another rival joins the hunt','Black holes multiply','Rivals grow faster and hungrier','The galaxy turns hostile'];
+function tickEndless(dt){
+  if(!isEndless() || state!=='play' || !P.alive) return;
+  endless.t+=dt;
+  if(endless.t>=WAVE_SECS){ endless.t-=WAVE_SECS; endless.wave++;
+    const pts=Math.round(5000*endless.wave*(1+lvl*.5)); bonus+=pts;
+    flash=Math.max(flash,.35); shake=Math.max(shake,10);
+    if(!botInput){ toast('Wave '+(endless.wave+1)+': '+(WAVE_MSG[Math.min(endless.wave,WAVE_MSG.length-1)])+' · +'+pts.toLocaleString(),'bad long'); sfx.boom(); }
+  }
+}
+function devourCore(o){
+  o.dead=true; endless.cores++;
+  const pts=Math.round(60000*(1+endless.wave*.5)*frenzyMult()); bonus+=pts;
+  const g=o.m*.5*gainScale(); P.m+=g; P.comp.silicate+=g; P.r=Math.cbrt(P.m); P.dirty=true; P.pop=1; P.rings.push(0); P.rings.push(-.2);
+  flash=Math.max(flash,.8); shake=Math.max(shake,24); burst(P.x,P.y,80,'#ffd9a0',P.r*9,P.r*.15,1.4);
+  // a bigger core awakens somewhere off screen
+  const vh=viewHalfDiag(), m=P.m*(3+endless.cores), r=Math.cbrt(m), a=Math.random()*TAU, d=vh*2+r*3;
+  objs.push({x:P.x+Math.cos(a)*d,y:P.y+Math.sin(a)*d,vx:0,vy:0,r,m,mat:'silicate',kind:'smbh',keep:true,seed:(Math.random()*9)|0,born:t});
+  goalKg=kg(m);
+  if(!botInput){ addPop(P.x,P.y,pts); toast('Core devoured! +'+pts.toLocaleString()+' · a bigger core awakens','gold long'); sfx.gold(); }
+}
 // Levels 1, 2 and 6: 30% more edible (green-ring) food, added on top; specks and dangerous bodies stay the same
 const FOOD_BOOST={0:1.3, 1:1.3, 5:1.3};
 const EDIBLE_SHARE=.71;   // share of spawns that are edible food (the .15-.86 band below)
@@ -1461,6 +1488,7 @@ function foodBoost(){ return tut?1:(FOOD_BOOST[lvl]||1); }
 function tgtObjs(){ return Math.round(TARGET_OBJS*(1+EDIBLE_SHARE*(foodBoost()-1))); }
 function sampleRatio(){
   let u=Math.random();
+  if(isEndless() && u<.86 && Math.random()<Math.min(.4,.045*endless.wave)) u=.91+Math.random()*.09;   // endless: food gives way to giants
   const fb=foodBoost();
   if(fb>1 && LEVELS[lvl].event!=='bombardment'){ const n=1+EDIBLE_SHARE*(fb-1), pS=.15/n, pF=EDIBLE_SHARE*fb/n;   // specks / edible food / the rest
     u = u<pS ? u/pS*.15 : (u<pS+pF ? .15+(u-pS)/pF*EDIBLE_SHARE : .86+(u-pS-pF)/(1-pS-pF)*.14); }
@@ -1545,7 +1573,7 @@ function spawnObj(x,y,ratio,mat,vx,vy){
     else if(ev==='death' && ratio>.25 && ratio<1.4 && u<.06){ o.kind='pulsar'; o.spr=planetSprites.starBlue[0]; }
     else if(ev==='race' && ratio>1.15 && u<.5) o.kind='bh';
     else if(ev==='race' && ratio>.35 && ratio<.8 && u<.14) o.kind='bh';
-    else if(ev==='core' && ratio>1.15 && u<.3) o.kind='bh';
+    else if(ev==='core' && ratio>1.15 && u<Math.min(.65,.3+.05*waveK())) o.kind='bh';
     // how bigger bodies move, level by level: still in Level 1, drifting slowly in Level 2, fast and crashing into each other from Level 3 on
     if(lvl===0 && ratio<=1.15){ o.vx*=.35; o.vy*=.35; }   // Level 1: everything else just drifts slowly
     if(ratio>1.15 && !o.kind){
@@ -1941,7 +1969,7 @@ function collideObjs(){
 }
 // Once you're over the survival line you can end the level early: the timer jumps to zero, the event plays
 // out as usual, and the unused time turns into bonus points.
-function canSkip(){ const L=LEVELS[lvl]; return L.event!=='race' && P.alive; }
+function canSkip(){ const L=LEVELS[lvl]; return L.event!=='race' && L.event!=='core' && P.alive; }
 function startEvent(){ if(tut){ finishTutorial(true); return; }
   // fast clear: the quicker you filled the bar, the bigger the bonus (it runs out at the level's par time)
   const L=LEVELS[lvl], par=L.parTime||L.dur||110, used=lvlElapsed, base=2500+lvl*1500;
@@ -2159,7 +2187,7 @@ function chips(x,y,mass,count,speed,dirx,diry){
 // outgrow a rival and it flees, and you can swallow it for a big bonus; same size and you bounce apart, both losing a
 // little mass; bigger than you and it hunts you down (a touch slower than your top speed, so you can get away).
 const RIVAL_RGB='255,80,170', RIVAL_FROM=4, RIVAL_NAMES=['Vex','Kora','Nyx','Talos','Sable','Ixion','Mara','Juno'];
-function rivalCount(){ return lvl<RIVAL_FROM ? 0 : (lvl>=7 ? 2 : 1); }
+function rivalCount(){ return lvl<RIVAL_FROM ? 0 : (lvl>=7 ? 2+Math.min(3,Math.floor(waveK()/2)) : 1); }
 function rivalSprite(rv){
   const k=kg(rv.m);
   if(k>WORLD_KG && planetSprites.rocky){ const ty=planetTypeFor(rv.mat,k); if(rv.ty!==ty){ rv.ty=ty; const pool=planetSprites[ty]; rv.spr=pool[rv.seed%pool.length]; } }
@@ -2183,7 +2211,7 @@ function tickRivals(dt){
       spawnRival(); rivalT=8; } }
   for(const rv of rivals){
     // growth: a steady pace of its own, faster while it's tiny next to you, and never far past you
-    const rel=rv.m/P.m, pace=(rel<.08?.18:(rel<.3?.08:.045))*(lvl===4?.6:1);
+    const rel=rv.m/P.m, pace=(rel<.08?.18:(rel<.3?.08:.045))*(lvl===4?.6:1)*(1+.12*waveK());
     rv.m*=Math.exp(pace*dt); rv.m=Math.min(rv.m, P.m*4); rv.r=Math.cbrt(rv.m);
     const ratio=rv.r/pr, dx=P.x-rv.x, dy=P.y-rv.y, d=Math.hypot(dx,dy)||1;
     // it only chases or runs when you're close; the rest of the time it feeds
@@ -2195,7 +2223,7 @@ function tickRivals(dt){
       const fade=Math.min(1,(rPull-od)/(rPull*.5)), acc=G*rv.r*rv.r*rv.r/Math.max(od*od,rv.r*rv.r)*fade; o.vx+=ox/od*acc*dt; o.vy+=oy/od*acc*dt; }
     // pick a heading
     let tx=0, ty=0, sp=Math.max(pr,rv.r*.8)*5;
-    if(rv.mode==='hunt'){ tx=dx/d; ty=dy/d; sp=pr*6.6*(lvl===4?.45:1); }   // Level 5's hunter chases at 45% speed
+    if(rv.mode==='hunt'){ tx=dx/d; ty=dy/d; sp=pr*6.6*(lvl===4?.45:1)*(1+Math.min(.5,.06*waveK())); }   // Level 5's hunter chases at 45% speed
     else if(rv.mode==='flee'){ tx=-dx/d; ty=-dy/d; sp=pr*6.0; }
     if(rv.mode!=='hunt'){
       // go for the nearest food it can eat
@@ -3202,7 +3230,7 @@ function update(dt){
         const reach=o.r*16;
         if(d<reach){ const edge=Math.min(1,(reach-d)/(o.r*6)); const a=Math.min(P.r*7, G*.5*o.r*o.r*o.r/Math.max(d*d,o.r*o.r))*edge; P.vx+=dx/d*a*dt; P.vy+=dy/d*a*dt; }
         if(d<pr*.6+o.r*.85){
-          if(P.m>=o.m*.98){ o.dead=true; winEnding('merge'); }
+          if(P.m>=o.m*.98){ devourCore(o); }
           else if(!god && !useShield(o,dx,dy,d)){ deathBy=o; } if(!god && P.alive && deathBy===o) die(L.failCause,'You fell into the supermassive black hole while it was still '+fmtX(o.m/P.m)+' heavier than you.');
         }
       }
@@ -3432,7 +3460,8 @@ function tickLevel(dt,L){
   if(L.event==='core' && state==='play'){
     // the core keeps feeding too: you have to outgrow a moving target
     const core=objs.find(o=>o.kind==='smbh');
-    if(core){ core.m*=Math.exp(.03*dt); core.r=Math.cbrt(core.m); goalKg=kg(core.m); }
+    if(core){ core.m*=Math.exp(.03*(1+.3*endless.wave)*dt); core.r=Math.cbrt(core.m); goalKg=kg(core.m); }
+    tickEndless(dt);
   }
   if(L.event==='race'){
     const k=kg(P.m);
@@ -3628,9 +3657,9 @@ function drawHud(k){
   { const el=$('combo'), m=frenzyMult(), pct=Math.round(fz*100);
     el.innerHTML='<div class="fzBar'+(frenzyT>0?' on':'')+'"><i style="width:'+pct+'%"></i></div><span>'+(frenzyT>0?'FRENZY ×4':(m>1?'×'+m:'Frenzy'))+'</span>'; }
   // clock
-  $('clockLvl').textContent='Level '+(lvl+1)+' · '+L.name;
+  $('clockLvl').textContent=isEndless()?'Level 9 · Endless · Wave '+(endless.wave+1):'Level '+(lvl+1)+' · '+L.name;
   $('clockTime').hidden = state!=='event'; $('clockTime').textContent='NOW';
-  $('clockEvent').textContent = state==='event' ? L.clockLabel.replace(/^until /,'') : '';
+  $('clockEvent').textContent = isEndless()&&state==='play' ? 'next wave in '+Math.ceil(WAVE_SECS-endless.t)+'s' : (state==='event' ? L.clockLabel.replace(/^until /,'') : '');
   $('heatWrap').hidden = true;
   const tg=$('target');
   tg.classList.toggle('safe',safe);
@@ -5458,7 +5487,7 @@ window.__stardust = {
     formIdx=save;
   },
   jump(i,k){ setMass(k/KG_PER_UNIT); cam.z=Math.min(W,H)*.052/P.r; formIdx=formIndex(k); P.dirty=true; startLevel(i); state='play'; },
-  get rivals(){return rivals}, spawnRival:()=>spawnRival(),
+  get rivals(){return rivals}, spawnRival:()=>spawnRival(), get endless(){return endless},
   get PU(){return PU}, renderPowers:()=>renderPowers(), get gulps(){return gulps}, get tut(){return tut}, tutGo:i=>tutGo(i), spawnTreasure:k=>spawnTreasure(k), get input(){return [readInput(),mouse.thrust,joy,touches.size,boostReq]}, choose, get picks(){return picks},
   die:(c,l)=>die(c,l), ending:()=>{ state='play'; winEnding(); },
   begin, kg:()=>kg(P.m), setKg(k){ setMass(k/KG_PER_UNIT); }, set god(v){ god=v; }, set autoPick(v){ autoPick=v; },
