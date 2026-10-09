@@ -474,7 +474,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 34</div>
+  <div class="build">Build 35</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -597,18 +597,18 @@ const TIERS=[
 ];
 const POWERS=[
   {id:'sticky',   tier:0, ico:'✺', name:'Sticky Dust',     max:4, desc:'You can hit things 25% faster and still merge cleanly.'},
-  {id:'iron',     tier:0, ico:'⬢', name:'Iron Core',       max:1, desc:'Survive one hit from something bigger. Used up when it saves you.'},
+  {id:'iron',     tier:0, ico:'⬢', name:'Iron Core',       max:3, desc:'Survive one hit from something bigger: it shatters into 3 molten chunks you can eat. One charge per pick.'},
   {id:'thrust',   tier:0, ico:'➹', name:'Solar Sails',     max:4, desc:'+15% thrust, so you turn and accelerate faster.'},
   {id:'well',     tier:0, ico:'◎', name:'Deeper Well',     max:3, desc:'Your gravity reaches 10% farther to pull in food.'},
   {id:'frost',    tier:1, ico:'❄︎', name:'Frost Coat',      max:3, desc:'Ice gives you double mass. Each extra pick adds a bit more.'},
   {id:'magnet',   tier:1, ico:'Ω', name:'Magnetic Field',  max:1, desc:'Cosmic events treat you as 15% heavier, and gas drag ignores you.'},
   {id:'burner',   tier:1, ico:'»', name:'Afterburner',     max:3, desc:'Boost is 25% stronger and recharges 35% faster.'},
-  {id:'moon',     tier:2, ico:'☾', name:'Captured Moon',   max:2, desc:'A moon circles just past your gravity\'s reach and eats the food you would miss.'},
+  {id:'moon',     tier:2, ico:'☾', name:'Captured Moon',   max:3, desc:'A moon circles just past your gravity\'s reach and eats the food you would miss.'},
   {id:'resonance',tier:2, ico:'≋', name:'Resonance Lock',  max:2, desc:'Every 8 seconds a pulse drags nearby food toward you.'},
-  {id:'chain',    tier:2, ico:'∞', name:'Chain Reaction',  max:2, desc:'Your frenzy meter fills faster and drains slower.'},
+  {id:'chain',    tier:2, ico:'∞', name:'Chain Reaction',  max:6, desc:'Your frenzy meter fills faster and drains slower.'},
   {id:'comets',   tier:3, ico:'☄︎', name:'Comet Swarm',     max:2, desc:'Every 6 seconds a swarm of big icy comets homes in on you. Comets give double mass.'},
   {id:'sling',    tier:3, ico:'↻', name:'Slingshot Master',max:1, desc:'Big bodies pull on you 60% weaker.'},
-  {id:'luck',     tier:3, ico:'✧', name:'Lucky Star',      max:3, desc:'Rare cards show up more often and gold is 3× as common.'},
+  {id:'luck',     tier:3, ico:'✧', name:'Lucky Star',      max:3, desc:'Rare cards show up more often, and gold and diamonds are 3× as common.'},
   {id:'kilonova', tier:4, ico:'✦', name:'Kilonova Blessing',max:1, desc:'For 15 seconds, gold is everywhere.'},
   {id:'halo',     tier:4, ico:'◌', name:'Dark Matter Halo',max:1, desc:'Your pull reaches 40% farther.'},
   {id:'wormhole', tier:4, ico:'⊛', name:'Wormhole',        max:1, desc:'Every 12 s a portal pours food out next to you. Once per level, it warps you away from a body that would crush you.'},
@@ -2359,8 +2359,9 @@ function tickTreasures(dt){
   treasureT-=dt;
   if(treasureT>0) return;
   treasureT=rnd(20,32);
-  const u=Math.random(); let kind='silver', acc=0;
-  for(const k in TREASURES){ acc+=TREASURES[k].chance; if(u<=acc){ kind=k; break; } }
+  let u=Math.random(); let kind='silver', acc=0;
+  const tw=k=>TREASURES[k].chance*(k==='diamond'&&has('luck')?3:1), tsum=Object.keys(TREASURES).reduce((a,k)=>a+tw(k),0); u*=tsum;   // Lucky Star: diamonds 3x as likely
+  for(const k in TREASURES){ acc+=tw(k); if(u<=acc){ kind=k; break; } }
   spawnTreasure(kind);
 }
 function spawnTreasure(kind){
@@ -2553,6 +2554,14 @@ function useShield(o,dx,dy,d){
   setMass(P.m*.85);
   const nx=-dx/d, ny=-dy/d; P.vx=nx*P.r*8; P.vy=ny*P.r*8; P.recover=1.2;
   shake=14; burst(P.x,P.y,40,'#c9d4ff',P.r*9,P.r*.12,.9); ironShock();
+  if(o && !o.kind && !o.gas && !o.treasure && objs.includes(o)){   // the body you hit shatters into 3 molten chunks, small enough to eat
+    o.dead=true; const w=ironWaves[ironWaves.length-1], a0=Math.atan2(o.y-P.y,o.x-P.x);
+    burst(o.x,o.y,40,'#ffb060',o.r*5,o.r*.12,1); burst(o.x,o.y,18,'#ffffff',o.r*3,o.r*.06,.6);
+    for(let i=0;i<3;i++){ const a=a0+(i-1)*1.05, r=P.r*.74, sp=P.r*rnd(1.2,2.2);
+      const c=spawnObj(o.x+Math.cos(a)*o.r*.5, o.y+Math.sin(a)*o.r*.5, r/Math.max(worldR,1e-9), o.mat, o.vx*.3+Math.cos(a)*sp, o.vy*.3+Math.sin(a)*sp);
+      c.r=r; c.m=r*r*r*(MATS[c.mat]||MATS.silicate).dens; c.molten=t; c.nohit=.5; c.hunter=false; if(w) w.hit.add(c); }
+    if(!botInput) setTimeout(()=>toast('It shattered! Eat the molten chunks','gold'),300);
+  }
   if(!botInput) toast('Iron Core took the hit'+(PU.iron?' ('+PU.iron+' left)':''),'gold');
   return true;
 }
@@ -4889,7 +4898,8 @@ function draw(){
     if(fadeIn<1) ctx.globalAlpha=1;
     if(sr>2.5 && P.alive && playing && !o.flung){
       let col, a;
-      if(ratio<.82){ col='111,227,160'; a=ratio<.3?.18:.38; }
+      if(o.molten && t-o.molten<12 && ratio<.82){ col='255,150,60'; a=.85; ctx.save(); ctx.globalCompositeOperation='lighter'; const gl=ctx.createRadialGradient(sx,sy,sr*.6,sx,sy,sr*1.7); gl.addColorStop(0,'rgba(255,140,50,.35)'); gl.addColorStop(1,'rgba(255,140,50,0)'); ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(sx,sy,sr*1.7,0,TAU); ctx.fill(); ctx.restore(); }
+      else if(ratio<.82){ col='111,227,160'; a=ratio<.3?.18:.38; }
       else if(ratio<=1.15){ col='255,215,94'; a=.7; }
       else { col='255,93,93'; const dd=Math.hypot(o.x-P.x,o.y-P.y), near=dd/(o.r*4); a=.5+.4*Math.max(0,1-near)*(.6+.4*Math.sin(t*10));
         if(dd<o.r*BIG_WELL){ ctx.save(); ctx.setLineDash([4,8]); ctx.strokeStyle='rgba(255,93,93,'+(.1+.12*(1-dd/(o.r*BIG_WELL))).toFixed(2)+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(sx,sy,sr*BIG_WELL,0,TAU); ctx.stroke(); ctx.restore(); } }
