@@ -396,6 +396,14 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
   .hud{padding-left:max(14px, env(safe-area-inset-left,0px) + 8px);padding-right:max(14px, env(safe-area-inset-right,0px) + 8px);padding-top:calc(env(safe-area-inset-top,0px) + 8px);}
   .goalDock{width:min(460px,calc(100vw - 40vw));}
 }
+.kiloBtn{--p:1;position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + var(--dockH,86px) + 70px);width:74px;height:74px;border-radius:50%;border:0;padding:0;cursor:pointer;z-index:6;
+  display:grid;place-items:center;align-content:center;gap:1px;color:#2a1600;font-family:var(--display);touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  background:radial-gradient(circle at 40% 35%,#fff6c8,#ffcc4d 45%,#e58a12 80%);box-shadow:0 0 0 3px rgba(20,12,0,.55),0 0 24px rgba(255,190,70,.75);animation:kiloReady 1.4s ease-in-out infinite alternate;}
+.kiloBtn span{font-size:1.5rem;line-height:1}.kiloBtn b{font-size:.5rem;letter-spacing:.1em;font-weight:700}
+.kiloBtn.cd{animation:none;color:rgba(255,230,170,.9);cursor:default;background:conic-gradient(rgba(255,200,80,.85) calc(var(--p)*360deg), rgba(30,22,10,.85) 0);box-shadow:0 0 0 3px rgba(20,12,0,.55);}
+.kiloBtn.cd span{opacity:.5}
+@keyframes kiloReady{from{box-shadow:0 0 0 3px rgba(20,12,0,.55),0 0 14px rgba(255,190,70,.5)}to{box-shadow:0 0 0 3px rgba(20,12,0,.55),0 0 34px rgba(255,210,90,1)}}
+@media (orientation:landscape) and (max-height:520px){ .kiloBtn{right:auto;left:max(14px, env(safe-area-inset-left,0px) + 10px);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);width:64px;height:64px;} }
 </style>
 
 <canvas id="c" aria-label="Stardust game"></canvas>
@@ -433,6 +441,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
 <div class="toasts" id="toasts"></div>
 <div class="hint" id="hint"></div>
 <div class="powers" id="powers" aria-label="Your power-ups"></div>
+<button class="kiloBtn" id="kiloBtn" type="button" aria-label="Kilonova" title="Kilonova (E)" hidden><span>✦</span><b>KILONOVA</b></button>
 <div class="tutZone" id="tutZone" hidden aria-hidden="true"></div>
 <div class="coach" id="coach" hidden role="status" aria-live="polite">
   <div class="coachTop"><span class="coachStep" id="coachStep">1 / 8</span><button class="coachSkip" id="coachSkip" type="button">Skip tutorial</button></div>
@@ -474,7 +483,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 35</div>
+  <div class="build">Build 36</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -609,7 +618,7 @@ const POWERS=[
   {id:'comets',   tier:3, ico:'☄︎', name:'Comet Swarm',     max:2, desc:'Every 6 seconds a swarm of big icy comets homes in on you. Comets give double mass.'},
   {id:'sling',    tier:3, ico:'↻', name:'Slingshot Master',max:1, desc:'Big bodies pull on you 60% weaker.'},
   {id:'luck',     tier:3, ico:'✧', name:'Lucky Star',      max:3, desc:'Rare cards show up more often, and gold and diamonds are 3× as common.'},
-  {id:'kilonova', tier:4, ico:'✦', name:'Kilonova Blessing',max:1, desc:'For 15 seconds, gold is everywhere.'},
+  {id:'kilonova', tier:4, ico:'✦', name:'Kilonova Blessing',max:1, desc:'Gives you a Kilonova button: a golden blast turns everything on screen to dust, then pulls it all into you. Recharges in 40 s.'},
   {id:'halo',     tier:4, ico:'◌', name:'Dark Matter Halo',max:1, desc:'Your pull reaches 40% farther.'},
   {id:'wormhole', tier:4, ico:'⊛', name:'Wormhole',        max:1, desc:'Every 12 s a portal pours food out next to you. Once per level, it warps you away from a body that would crush you.'},
 ];
@@ -1403,7 +1412,7 @@ function newGame(){
     rot:0,pop:0,rings:[],dirty:true,renderT:0,surfStage:-1,alive:true};
   startMass = P.m; worldR=P.r; spawnBudget=0;
   pops=[]; wreck=null; fz=0; fzLast=0; fzTier=0; frenzyT=0; nearChain=0; nearLastT=-99; parts=[]; streaks=[]; t=0; score=0; hudScore=0; lastBumpScore=0; rawLast=0; ringExtra=0; bonus=0; streak=0; merges=0; shake=0; deathT=0;
-  PU={}; P.giftMoons=0; P.giantPath=false; P.level=1; evoQueue=[]; P.moons=[]; P.resT=0; P.cometT=0; P.kiloT=0; P.invuln=0; P.wormT=0; P.wormEsc=0; P.portal=null; P.synergy={}; P.dynamo=false; pickQueue=0; dryPicks=0;
+  PU={}; P.giftMoons=0; P.giantPath=false; P.level=1; evoQueue=[]; P.moons=[]; P.resT=0; P.cometT=0; P.kiloT=0; P.kiloCD=0; P.invuln=0; P.wormT=0; P.wormEsc=0; P.portal=null; P.synergy={}; P.dynamo=false; pickQueue=0; dryPicks=0;
   boostCD=0; lastHud=0; chipTips=0; flash=0;
   cam = {x:0,y:0,z:Math.min(W,H)*.052/START_R};
   nextCompare = COMPARE.findIndex(c=>c[0] > kg(P.m));
@@ -1652,6 +1661,7 @@ addEventListener('keydown',e=>{
     if((e.code==='Space'||e.code==='Enter') && !e.repeat){ e.preventDefault(); btns[i].click(); }
     return;
   }
+  if(e.code==='KeyE' && !e.repeat && active()){ e.preventDefault(); kiloBurst(); return; }
   if(e.code==='Space' || e.code==='Enter'){
     e.preventDefault();
     if(active()){ if(e.code==='Space') boostReq=true; }
@@ -2599,6 +2609,90 @@ function drawIronWaves(z,ox,oy){
     ctx.strokeStyle='rgba(150,170,230,'+(.55*a).toFixed(3)+')'; ctx.lineWidth=Math.max(1.5,P.r*z*.12*a); ctx.beginPath(); ctx.arc(sx,sy,r*.88,0,TAU); ctx.stroke();
     ctx.globalCompositeOperation='source-over'; }
 }
+// ---- Kilonova: a golden blast rolls out and turns everything on screen to dust, then the dust is pulled into you ----
+const KILO_CD=40, KILO_OUT=.65, KILO_IN=1.25;
+let kiloFx=null;
+function kiloReady(){ return PU.kilonova>0 && P.alive && state==='play' && !kiloFx && !(P.kiloCD>0); }
+function kiloBurst(){
+  if(!kiloReady()) return;
+  const vh=viewHalfDiag();
+  kiloFx={t0:t, R:vh*1.05, done:new Set(), dust:[], gain:{}, pts:0, n:0};
+  P.kiloCD=KILO_CD; P.invuln=Math.max(P.invuln,KILO_OUT+KILO_IN+.3);
+  flash=Math.max(flash,.6); shake=Math.max(shake,18); hitStop=Math.max(hitStop,.06);
+  if(!botInput){ sfx.boom(); [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>sfx.tone(f,.5,'triangle',.05),i*60)); try{ if(navigator.vibrate) navigator.vibrate([30,40,80]); }catch(e){} }
+}
+function kiloPulverize(o,isRival){
+  const F=kiloFx, M=isRival?{mid:'#ff7ad0'}:(MATS[o.mat]||MATS.silicate), n=Math.max(4,Math.min(14,Math.round(4+Math.sqrt(o.r/P.r)*5)));
+  const share=(o.m||0)/n, mat=isRival?'silicate':(o.mat||'silicate');
+  for(let i=0;i<n;i++){ const a=Math.random()*TAU, sp=o.r*rnd(.5,2.5);
+    F.dust.push({x:o.x+Math.cos(a)*o.r*Math.random(), y:o.y+Math.sin(a)*o.r*Math.random(), vx:Math.cos(a)*sp+(o.vx||0)*.3, vy:Math.sin(a)*sp+(o.vy||0)*.3, m:share, mat, c:Math.random()<.45?'#ffd76a':M.mid, s:rnd(.5,1.1)}); }
+  F.n++; F.pts+=isRival?2500:20;
+  burst(o.x,o.y,8,'#ffd76a',o.r*2,o.r*.08,.5);
+}
+function tickKilo(dt){
+  if(P.kiloCD>0 && !kiloFx) P.kiloCD=Math.max(0,P.kiloCD-dt);
+  const F=kiloFx; if(!F) return;
+  const age=t-F.t0;
+  if(age<KILO_OUT){   // 1) the blast rolls outward and pulverizes whatever it reaches
+    const rf=P.r+(F.R-P.r)*(1-Math.pow(1-age/KILO_OUT,2));
+    for(const o of objs){ if(o.dead || F.done.has(o) || o.kind==='bh' || o.kind==='smbh' || o.treasure) continue;
+      if(Math.hypot(o.x-P.x,o.y-P.y)-o.r*.5<rf){ F.done.add(o); o.dead=true; o.keep=false; kiloPulverize(o,false); } }
+    for(const rv of rivals){ if(rv.dead || F.done.has(rv)) continue; if(Math.hypot(rv.x-P.x,rv.y-P.y)<rf){ F.done.add(rv); rv.dead=true; P.rivalKills=(P.rivalKills||0)+1; rivalT=4; kiloPulverize(rv,true); if(!botInput) toast('Rival '+rv.name+' turned to stardust!','gold'); } }
+  }
+  // dust drifts out, then is sucked in faster and faster
+  const pull=age<KILO_OUT?0:Math.min(1,(age-KILO_OUT)/KILO_IN);
+  for(const d of F.dust){
+    if(pull>0){ const dx=P.x-d.x, dy=P.y-d.y, dd=Math.hypot(dx,dy)||1, a=P.r*(8+70*pull*pull);
+      d.vx=d.vx*Math.exp(-3*dt)+dx/dd*a*dt*6; d.vy=d.vy*Math.exp(-3*dt)+dy/dd*a*dt*6;
+      if(dd<P.r*1.05 || pull>=1){ d.dead=true; F.gain[d.mat]=(F.gain[d.mat]||0)+d.m; } }
+    else { d.vx*=Math.exp(-2*dt); d.vy*=Math.exp(-2*dt); }
+    d.x+=d.vx*dt; d.y+=d.vy*dt;
+  }
+  F.dust=F.dust.filter(d=>!d.dead);
+  if(age>=KILO_OUT+KILO_IN && !F.dust.length){
+    // swallow it all at once (big bodies count, but one blast can't more than double you)
+    const L=LEVELS[lvl], raw=Object.values(F.gain).reduce((a,b)=>a+b,0), mul=GAIN_MULT*(L.foodMul||1)*gainScale();
+    const total=Math.min(raw*mul, P.m*1.0), k=raw>0?total/raw:0;
+    for(const m in F.gain){ const g=F.gain[m]*k; P.comp[m]=(P.comp[m]||0)+g; }
+    P.m+=total; P.r=Math.cbrt(P.m); P.dirty=true; P.pop=1; P.rings.push(0); P.rings.push(-.15);
+    const pts=Math.round(F.pts*(1+lvl*.5)*frenzyMult()); bonus+=pts; feedFrenzy(.6);
+    flash=Math.max(flash,.35); shake=Math.max(shake,8);
+    burst(P.x,P.y,50,'#ffd76a',P.r*7,P.r*.1,.9);
+    if(!botInput){ addPop(P.x,P.y,pts); toast('Kilonova! '+F.n+' bodies absorbed · +'+pts.toLocaleString(),'gold long'); sfx.gold(); }
+    kiloFx=null;
+  }
+}
+function drawKilo(z,ox,oy){
+  const F=kiloFx; if(!F) return;
+  const age=t-F.t0, px=P.x*z+ox, py=P.y*z+oy;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  if(age<KILO_OUT+.25){   // outward blast: a bright golden shell with a hot core flash
+    const q=Math.min(1,age/KILO_OUT), r=(P.r+(F.R-P.r)*(1-Math.pow(1-q,2)))*z, a=1-Math.max(0,(age-KILO_OUT)/.25);
+    const g=ctx.createRadialGradient(px,py,Math.max(1,r*.75),px,py,r); g.addColorStop(0,'rgba(255,200,80,0)'); g.addColorStop(.85,'rgba(255,215,110,'+(.35*a).toFixed(3)+')'); g.addColorStop(1,'rgba(255,245,200,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,TAU); ctx.fill();
+    ctx.strokeStyle='rgba(255,240,190,'+(.9*a).toFixed(3)+')'; ctx.lineWidth=Math.max(3,P.r*z*.5*a); ctx.beginPath(); ctx.arc(px,py,r,0,TAU); ctx.stroke();
+    if(q<.5){ const c=ctx.createRadialGradient(px,py,0,px,py,P.r*z*6); c.addColorStop(0,'rgba(255,250,220,'+(.7*(1-q*2)).toFixed(3)+')'); c.addColorStop(1,'rgba(255,200,80,0)'); ctx.fillStyle=c; ctx.beginPath(); ctx.arc(px,py,P.r*z*6,0,TAU); ctx.fill(); }
+  }
+  if(age>KILO_OUT){   // inward wave: a ring closing in on you as everything is sucked back
+    const q=Math.min(1,(age-KILO_OUT)/KILO_IN), r=(F.R*(1-q*q)+P.r*1.2*q*q)*z, a=Math.sin(Math.PI*Math.min(1,q*1.05));
+    ctx.strokeStyle='rgba(255,215,120,'+(.6*a).toFixed(3)+')'; ctx.lineWidth=Math.max(2,P.r*z*.25); ctx.setLineDash([P.r*z*.6,P.r*z*.4]); ctx.lineDashOffset=-t*200;
+    ctx.beginPath(); ctx.arc(px,py,r,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
+  for(const d of F.dust){   // the dust itself: little glowing motes with short streaks toward where they're heading
+    const x=d.x*z+ox, y=d.y*z+oy, sz=Math.max(1.5,P.r*z*.09*d.s), sp=Math.hypot(d.vx,d.vy)*z, L=Math.min(P.r*z*1.2,sp*.04);
+    if(L>1){ ctx.strokeStyle=d.c; ctx.globalAlpha=.55; ctx.lineWidth=sz; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-d.vx/ (Math.hypot(d.vx,d.vy)||1)*L, y-d.vy/(Math.hypot(d.vx,d.vy)||1)*L); ctx.stroke(); }
+    ctx.globalAlpha=.95; ctx.fillStyle=d.c; ctx.beginPath(); ctx.arc(x,y,sz,0,TAU); ctx.fill();
+  }
+  ctx.restore(); ctx.globalAlpha=1;
+}
+function syncKiloBtn(){
+  const b=$('kiloBtn'); if(!b) return;
+  const show=PU.kilonova>0 && P.alive && (state==='play'||state==='event') && !tut;
+  if(b.hidden===show) b.hidden=!show;
+  if(!show) return;
+  const cd=!!kiloFx || P.kiloCD>0;
+  b.classList.toggle('cd',cd); b.style.setProperty('--p', cd? (kiloFx?0:(1-P.kiloCD/KILO_CD)).toFixed(3) : 1);
+}
 function wormWarp(){
   const vh=viewHalfDiag(), a=Math.random()*TAU, d=vh*rnd(2.2,3);
   burst(P.x,P.y,50,'#b48cff',P.r*10,P.r*.15,1);
@@ -3086,6 +3180,7 @@ function update(dt){
     }
   }
   if(ironWaves.length) tickIronWaves();
+  if(kiloFx || P.kiloCD>0) tickKilo(dt);
   if(captures.length) tickCaptures();
   // objects: gravity + motion + collisions
   if(lvl>=3 && state==='play' && t-(P.huntT||0)>.5){   // hunters: from Level 4 on, the nearest big rocks come after you
@@ -3471,10 +3566,7 @@ function reroll(){
 function applyPower(p){
   PU[p.id]=(PU[p.id]||0)+1;
   dryPicks = p.tier>=2 ? 0 : dryPicks+1;
-  if(p.id==='kilonova'){
-    P.kiloT=15;
-    for(let i=0;i<14;i++){ const a=Math.random()*TAU, d=P.r*rnd(5,14); spawnObj(P.x+Math.cos(a)*d,P.y+Math.sin(a)*d,rnd(.2,.5),'gold'); }
-  }
+  if(p.id==='kilonova'){ P.kiloCD=0; if(!botInput) setTimeout(()=>toast('Kilonova ready! Tap the golden button'+(touchUI?'':' or press E')+' to unleash it','gold long'),400); }
   if(p.id==='wormhole'){ P.wormEsc=1; P.wormT=3; }
   for(const S of SYNERGIES){
     if(!P.synergy[S.id] && S.need.every(has)){ P.synergy[S.id]=true; if(S.id==='dynamo') P.dynamo=true; if(!botInput) setTimeout(()=>toast('Synergy unlocked: '+S.name+'. '+S.desc,'gold long'),300); }
@@ -4927,6 +5019,8 @@ function draw(){
   }
   if(P.alive && playing) drawRipples(P.x*z+ox, P.y*z+oy, pr*z);
   if(ironWaves.length) drawIronWaves(z,ox,oy);
+  if(kiloFx) drawKilo(z,ox,oy);
+  syncKiloBtn();
   if(captures.length) drawCaptures(z,ox,oy);
   if(playing) drawTreasureMarks(z,ox,oy);
   if(playing && QUALITY>=2) drawClouds(true);   // the thin foreground cloud layer is the first thing dropped when the game is struggling
@@ -5302,6 +5396,7 @@ function setupMenu(){
   $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join('');
   if(touchUI) document.querySelectorAll('.keyhint').forEach(el=>el.hidden=true);
   $('startBtn').addEventListener('click',()=>withName(()=>playIntro(()=>begin())));
+  $('kiloBtn').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); kiloBurst(); });
   $('ngForm').addEventListener('submit',submitNameGate);
   $('ngCancel').addEventListener('click',()=>{ $('nameGate').hidden=true; ngDone=null; });
   renderNameSetting();
