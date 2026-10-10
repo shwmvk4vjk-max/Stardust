@@ -313,6 +313,8 @@ button.ghost.sm{font-size:.68rem;padding:10px 18px;-webkit-backdrop-filter:blur(
   background:linear-gradient(180deg,color-mix(in srgb,var(--tc) 16%,#0c0e1c),#0c0e1c 60%);border:2px solid color-mix(in srgb,var(--tc) 70%,transparent);
   color:var(--ink);font:inherit;min-width:0;transition:transform .15s, box-shadow .15s;}
 .pcard:hover,.pcard:focus-visible{transform:translateY(-3px);box-shadow:0 0 22px color-mix(in srgb,var(--tc) 55%,transparent);outline:none;}
+body.gpnav button:focus{outline:3px solid #ffd76a!important;outline-offset:3px;box-shadow:0 0 0 6px rgba(255,215,106,.25),0 0 26px rgba(255,215,106,.55)!important;}
+body.gpnav .pcard:focus{transform:translateY(-6px) scale(1.04);}
 .pcard .tier{font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--tc);font-weight:600;}
 .pcard .ico{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:1.6rem;line-height:1;color:#1a1206;
   background:radial-gradient(circle at 35% 30%,#fff,var(--tc) 55%,color-mix(in srgb,var(--tc) 60%,#000));box-shadow:0 0 16px color-mix(in srgb,var(--tc) 60%,transparent);}
@@ -483,7 +485,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 40</div>
+  <div class="build">Build 41</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -523,7 +525,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div class="cards" id="cards"></div>
     <div class="pickfoot">
       <button class="ghost" id="rerollBtn" type="button">Reroll (R)</button>
-      <p class="small keyhint">Press 1, 2 or 3 · or use ← → and Enter</p>
+      <p class="small keyhint" id="pickKeys">Press 1, 2 or 3 · or use ← → and Enter</p>
     </div>
   </div>
 </div>
@@ -1776,6 +1778,7 @@ function pollGamepad(){
   const pad=[...navigator.getGamepads()].find(x=>x && x.connected);
   if(!pad){ gp.on=false; gp.ix=gp.iy=0; gp.brake=false; return; }
   gp.on=true;
+  if(gp.used && !document.body.classList.contains('gpnav')) document.body.classList.add('gpnav');
   const B=pad.buttons.map(b=>b && (b.pressed || b.value>.35)), was=gp.prev, down=i=>B[i] && !was[i];
   if(B.some(Boolean) || pad.axes.some(a=>Math.abs(a)>.3)) gp.used=true;
   // steering: stick (with a dead zone) or D-pad
@@ -1793,8 +1796,9 @@ function pollGamepad(){
     const now=performance.now(), dir = (B[12]||y<-.6)?'ArrowUp':(B[13]||y>.6)?'ArrowDown':(B[14]||x<-.6)?'ArrowLeft':(B[15]||x>.6)?'ArrowRight':null;
     if(dir && now>gp.navT){ gp.navT=now+(gp.lastDir===dir?180:320); gp.lastDir=dir; gpNav(dir); }
     if(!dir) gp.lastDir=null, gp.navT=0;
-    if(down(0)){ const a=document.activeElement; if(a && a!==document.body && a.tagName==='BUTTON' && !a.disabled && a.offsetParent) a.click(); else gpKey('Enter'); }
+    if(down(0)){ const a=document.activeElement; if(a && a!==document.body && a.tagName==='BUTTON' && !a.disabled && a.offsetParent) a.click(); else if(state==='pick'){ const c=$('cards').firstElementChild; if(c) c.focus({focusVisible:true}); } else gpKey('Enter'); }
     if(down(1)) gpKey('Escape');
+    if(state==='pick' && down(2) && rerolls>0 && performance.now()>=pickDelay) reroll();
     if(down(9)) gpKey(state==='paused'?'Escape':'Enter');
   }
   gp.prev=B;
@@ -1805,15 +1809,16 @@ function gpNav(dir){
   const btns=[...document.querySelectorAll('button')].filter(b=>!b.disabled && b.offsetParent && !b.closest('[hidden]') && b.getBoundingClientRect().width>0 && getComputedStyle(b).visibility!=='hidden');
   if(!btns.length) return;
   const cur=document.activeElement && btns.includes(document.activeElement) ? document.activeElement : null;
-  if(!cur){ (btns.find(b=>b.id==='startBtn'||b.id==='againBtn'||b.id==='nextBtn'||b.classList.contains('pcard'))||btns[0]).focus(); return; }
+  if(!cur){ (btns.find(b=>b.id==='startBtn'||b.id==='againBtn'||b.id==='nextBtn'||b.classList.contains('pcard'))||btns[0]).focus({focusVisible:true}); return; }
   const r=cur.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
   let best=null, bd=1e9;
   for(const b of btns){ if(b===cur) continue; const q=b.getBoundingClientRect(), bx=q.left+q.width/2, by=q.top+q.height/2, dx=bx-cx, dy=by-cy;
     const ok = dir==='ArrowRight'?dx>4:dir==='ArrowLeft'?dx<-4:dir==='ArrowDown'?dy>4:dy<-4; if(!ok) continue;
     const main = (dir==='ArrowLeft'||dir==='ArrowRight')?Math.abs(dx):Math.abs(dy), side=(dir==='ArrowLeft'||dir==='ArrowRight')?Math.abs(dy):Math.abs(dx), sc=main+side*2.2;
     if(sc<bd){ bd=sc; best=b; } }
-  if(best) best.focus();
+  if(best) best.focus({focusVisible:true});
 }
+addEventListener('pointerdown',()=>{ gp.used=false; document.body.classList.remove('gpnav'); },true);
 addEventListener('gamepadconnected',e=>{ if(state==='play' && !botInput) toast('🎮 Controller connected','gold'); else setTimeout(()=>{ const s=$('startBtn'); if(s && !$('menu').hidden) s.focus(); },100); });
 function readInput(){
   if(botInput) return botInput();
@@ -3611,6 +3616,7 @@ function openPick(){
   $('pickEyebrow').textContent='Evolution · '+fmtMass(kg(P.m));
   { const q=evoQueue[0]; $('pickTitle').textContent=(typeof q==='string'?q.slice(3):((n=>'You became '+(/^[aeiou]/.test(n)?'an ':'a ')+n)(FORMS[q][1].toLowerCase())))+' · choose a power'; }
   renderCards();
+  $('pickKeys').textContent=gp.used?'🎮 Stick or D-pad to move · A to choose · X to reroll':'Press 1, 2 or 3 · or use ← → and Enter';
   $('pick').hidden=false;
   setTimeout(()=>{ const f=$('cards').firstElementChild; if(f) f.focus(); },50);
 }
@@ -5481,7 +5487,7 @@ function begin(){
 function setupMenu(){
   const rows = touchUI
     ? [['Drag','Steer: your object (cyan ring) flies the way you drag'],['Hold a 2nd finger','Brake (red screen border)'],['Double-tap a 2nd finger','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Pause button','Pause']]
-    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['🎮 Controller','Left stick or D-pad steers · hold B or LT to brake · A or RT to boost · Y for Kilonova · Start to pause'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
+    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['🎮 Controller','Left stick or D-pad steers · hold B or LT to brake · A or RT to boost · Y for Kilonova · Start to pause · in menus the stick or D-pad moves, A selects, X rerolls powers'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
   $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join('');
   if(touchUI) document.querySelectorAll('.keyhint').forEach(el=>el.hidden=true);
   $('startBtn').addEventListener('click',()=>withName(()=>playIntro(()=>begin())));
