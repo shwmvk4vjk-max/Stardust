@@ -496,7 +496,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 42</div>
+  <div class="build">Build 43</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -1860,6 +1860,14 @@ function pollGamepad(){
     gp.prev=B; gp.brake=false; return;
   }
   if(rebinding){ gp.prev=B; return; }
+  // "ready" pause after a power-up: push the stick or D-pad (or any face button) to fly again
+  if(state==='ready'){
+    const pushed=Math.hypot(x,y)>.5, face=[0,1,2,3,6,7].some(down);
+    if(!pushed) gp.armReady=true;
+    if((pushed && gp.armReady) || face){ gp.armReady=false; gp.prev=B; resumeFromReady(); return; }
+    gp.prev=B; return;
+  }
+  gp.armReady=false;
   const playing=active() && P.alive;
   if(playing){
     if(GB.boost.some(down)) boostReq=true;
