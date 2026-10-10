@@ -483,7 +483,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 38</div>
+  <div class="build">Build 39</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -1649,7 +1649,7 @@ function spawnCloud(ang,dist){
 const keys = {};
 let mouse={x:0,y:0,thrust:false,brake:false};
 const touches = new Map();
-let joy=null, lastTapUp=0, lastActTap=0, actFx=null, boostReq=false;
+let joy=null, lastTapUp=0, lastActTap=0, actFx=null, boostReq=false, lastSpaceDown=0, spaceBoosted=false;
 const JOY_R=56;
 addEventListener('keydown',e=>{
   if(e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA')) return;   // typing a leaderboard name
@@ -1692,7 +1692,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyE' && !e.repeat && active()){ e.preventDefault(); kiloBurst(); return; }
   if(e.code==='Space' || e.code==='Enter'){
     e.preventDefault();
-    if(active()){ if(e.code==='Space') boostReq=true; }
+    if(active()){ if(e.code==='Space' && !e.repeat){ const now=performance.now();   // Space: hold to brake, double-tap to boost
+        if(now-lastSpaceDown<300){ boostReq=true; spaceBoosted=true; lastSpaceDown=0; } else lastSpaceDown=now; } }
     else if(!e.repeat){
       if(!$('clear').hidden){
         if(!$('pathBtns').hidden){ const a=document.activeElement; if(a===$('pathGas')) choosePath(true); else choosePath(false); }
@@ -1706,7 +1707,7 @@ addEventListener('keydown',e=>{
   if(e.code.startsWith('Arrow')) e.preventDefault();
   if(e.code==='KeyT' && state==='play') startEvent();   // playtest: trigger the event now
 });
-addEventListener('keyup',e=>{ keys[e.code]=false; });
+addEventListener('keyup',e=>{ keys[e.code]=false; if(e.code==='Space') spaceBoosted=false; });
 addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; mouse.thrust=mouse.brake=false; touches.clear(); joy=null; });
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
@@ -1783,7 +1784,7 @@ function readInput(){
   }
   let touchBrake=false; const now=performance.now();
   for(const tt of touches.values()) if(tt.role==='act' && now-tt.t>140) touchBrake=true;   // a held second finger brakes; a quick tap doesn't
-  const braking = keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
+  const braking = (keys.Space && !spaceBoosted)||keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
   return {ix,iy,braking};
 }
 
@@ -2001,9 +2002,9 @@ const TUT_STEPS = [
   { id:'danger', title:'Avoid bigger things', noInput:true,
     text:()=> 'A <span class="r">red ring</span> means it is bigger than you, and its gravity is stronger than yours. Watch what happens when it pulls you in…' },
   { id:'brake',  title:'Brake', freeze:true, zone:'brake',
-    text:()=> touchUI ? 'In a game you steer with one finger and use a <b>second finger</b> for actions. <b>Press and hold</b> the glowing circle to brake.' : '<b>Hold Shift</b> (or the right mouse button) to brake.' },
+    text:()=> touchUI ? 'In a game you steer with one finger and use a <b>second finger</b> for actions. <b>Press and hold</b> the glowing circle to brake.' : '<b>Hold Space</b> to brake (Shift or the right mouse button work too).' },
   { id:'boost',  title:'Boost', freeze:true, zone:'boost',
-    text:()=> touchUI ? 'Quickly <b>double-tap</b> the glowing circle with your second finger to boost. It costs a little mass, so save it for escapes.' : 'Press <b>Space</b> to boost. It costs a little mass, so save it for escapes.' },
+    text:()=> touchUI ? 'Quickly <b>double-tap</b> the glowing circle with your second finger to boost. It costs a little mass, so save it for escapes.' : '<b>Double-tap Space</b> to boost. It costs a little mass, so save it for escapes.' },
   { id:'evolve', title:'Evolve',
     text:()=> 'As you grow you <b>evolve</b> into new forms: dust, pebble, stone, all the way to a black hole. Eat the glowing chunk to reach your next form.' },
   { id:'powers', title:'Power-ups', go:true,
@@ -5414,7 +5415,7 @@ function begin(){
   const hint=$('hint'); hint.style.opacity='1';
   hint.innerHTML = touchUI
     ? '<b>Drag</b> to steer · <b>hold a 2nd finger</b> to brake · <b>double-tap a 2nd finger</b> to boost'
-    : '<b>Arrow keys</b>, <b>WASD</b> or <b>hold left mouse</b> to thrust · <b>Shift / right-click</b> to brake · <b>Space</b> to boost';
+    : '<b>Arrow keys</b>, <b>WASD</b> or <b>hold left mouse</b> to thrust · <b>hold Space</b> to brake · <b>double-tap Space</b> to boost';
   setTimeout(()=>{ hint.style.opacity='0'; },9000);
   dropTutorial();
   if(!botInput && (wantTut || !tutDone())){ wantTut=false; startTutorial(); }
@@ -5426,7 +5427,7 @@ function begin(){
 function setupMenu(){
   const rows = touchUI
     ? [['Drag','Steer: your object (cyan ring) flies the way you drag'],['Hold a 2nd finger','Brake (red screen border)'],['Double-tap a 2nd finger','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Pause button','Pause']]
-    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Shift / right mouse','Brake (red screen border)'],['Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
+    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
   $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join('');
   if(touchUI) document.querySelectorAll('.keyhint').forEach(el=>el.hidden=true);
   $('startBtn').addEventListener('click',()=>withName(()=>playIntro(()=>begin())));
