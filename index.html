@@ -483,7 +483,7 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 39</div>
+  <div class="build">Build 40</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -1765,6 +1765,56 @@ addEventListener('pointercancel',e=>{ if(e.target!==cv) endPointer(e); });
 // forget every held key, button, finger and queued boost, so nothing carries into the next run
 function clearInput(){ for(const k in keys) keys[k]=false; mouse.thrust=mouse.brake=false; touches.clear(); joy=null; boostReq=false; actFx=null; }
 
+// ---- game controller (Xbox / PlayStation / most USB and Bluetooth pads) ----
+// Left stick or D-pad: steer · B or LT (hold): brake · A or RT: boost · Y: Kilonova · Start: pause
+// In menus: A = confirm, B = back, D-pad / stick = move between buttons
+const gp={on:false, ix:0, iy:0, brake:false, prev:[], navT:0, used:false};
+function gpKey(code){ for(const type of ['keydown','keyup']) window.dispatchEvent(new KeyboardEvent(type,{code,key:code,bubbles:true})); }
+function rumble(ms,str){ try{ const p=[...(navigator.getGamepads?navigator.getGamepads():[])].find(x=>x&&x.connected); const v=p&&p.vibrationActuator; if(v&&v.playEffect) v.playEffect('dual-rumble',{duration:ms,strongMagnitude:str,weakMagnitude:Math.min(1,str*1.3)}); }catch(e){} }
+function pollGamepad(){
+  if(!navigator.getGamepads) return;
+  const pad=[...navigator.getGamepads()].find(x=>x && x.connected);
+  if(!pad){ gp.on=false; gp.ix=gp.iy=0; gp.brake=false; return; }
+  gp.on=true;
+  const B=pad.buttons.map(b=>b && (b.pressed || b.value>.35)), was=gp.prev, down=i=>B[i] && !was[i];
+  if(B.some(Boolean) || pad.axes.some(a=>Math.abs(a)>.3)) gp.used=true;
+  // steering: stick (with a dead zone) or D-pad
+  let x=pad.axes[0]||0, y=pad.axes[1]||0; const m=Math.hypot(x,y);
+  if(m<.2){ x=0; y=0; } else { const k=Math.min(1,(m-.2)/.75); x=x/m*k; y=y/m*k; }
+  if(B[14]) x=-1; if(B[15]) x=1; if(B[12]) y=-1; if(B[13]) y=1;
+  gp.ix=x; gp.iy=y; gp.brake=!!(B[1]||B[6]);
+  const playing=active() && P.alive;
+  if(playing){
+    if(down(0)||down(7)) boostReq=true;
+    if(down(3)) kiloBurst();
+    if(down(9)) gpKey('Escape');
+  } else {
+    // menus and overlays: the D-pad / stick moves between buttons, A presses, B goes back
+    const now=performance.now(), dir = (B[12]||y<-.6)?'ArrowUp':(B[13]||y>.6)?'ArrowDown':(B[14]||x<-.6)?'ArrowLeft':(B[15]||x>.6)?'ArrowRight':null;
+    if(dir && now>gp.navT){ gp.navT=now+(gp.lastDir===dir?180:320); gp.lastDir=dir; gpNav(dir); }
+    if(!dir) gp.lastDir=null, gp.navT=0;
+    if(down(0)){ const a=document.activeElement; if(a && a!==document.body && a.tagName==='BUTTON' && !a.disabled && a.offsetParent) a.click(); else gpKey('Enter'); }
+    if(down(1)) gpKey('Escape');
+    if(down(9)) gpKey(state==='paused'?'Escape':'Enter');
+  }
+  gp.prev=B;
+}
+// move focus to the next visible button in that direction (by screen position)
+function gpNav(dir){
+  if(state==='paused' && (dir==='ArrowUp'||dir==='ArrowDown')){ gpKey(dir); return; }
+  const btns=[...document.querySelectorAll('button')].filter(b=>!b.disabled && b.offsetParent && !b.closest('[hidden]') && b.getBoundingClientRect().width>0 && getComputedStyle(b).visibility!=='hidden');
+  if(!btns.length) return;
+  const cur=document.activeElement && btns.includes(document.activeElement) ? document.activeElement : null;
+  if(!cur){ (btns.find(b=>b.id==='startBtn'||b.id==='againBtn'||b.id==='nextBtn'||b.classList.contains('pcard'))||btns[0]).focus(); return; }
+  const r=cur.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let best=null, bd=1e9;
+  for(const b of btns){ if(b===cur) continue; const q=b.getBoundingClientRect(), bx=q.left+q.width/2, by=q.top+q.height/2, dx=bx-cx, dy=by-cy;
+    const ok = dir==='ArrowRight'?dx>4:dir==='ArrowLeft'?dx<-4:dir==='ArrowDown'?dy>4:dy<-4; if(!ok) continue;
+    const main = (dir==='ArrowLeft'||dir==='ArrowRight')?Math.abs(dx):Math.abs(dy), side=(dir==='ArrowLeft'||dir==='ArrowRight')?Math.abs(dy):Math.abs(dx), sc=main+side*2.2;
+    if(sc<bd){ bd=sc; best=b; } }
+  if(best) best.focus();
+}
+addEventListener('gamepadconnected',e=>{ if(state==='play' && !botInput) toast('🎮 Controller connected','gold'); else setTimeout(()=>{ const s=$('startBtn'); if(s && !$('menu').hidden) s.focus(); },100); });
 function readInput(){
   if(botInput) return botInput();
   let ix=0,iy=0;
@@ -1782,9 +1832,10 @@ function readInput(){
     const dx=joy.x-joy.ox, dy=joy.y-joy.oy, d=Math.hypot(dx,dy);
     if(d>5){ const k=Math.min(1,(d-5)/(JOY_R-12)); ix=dx/d*k; iy=dy/d*k; }
   }
+  if(gp.on && (gp.ix||gp.iy)){ ix=gp.ix; iy=gp.iy; }
   let touchBrake=false; const now=performance.now();
   for(const tt of touches.values()) if(tt.role==='act' && now-tt.t>140) touchBrake=true;   // a held second finger brakes; a quick tap doesn't
-  const braking = (keys.Space && !spaceBoosted)||keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
+  const braking = (gp.on && gp.brake)||(keys.Space && !spaceBoosted)||keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
   return {ix,iy,braking};
 }
 
@@ -2589,7 +2640,7 @@ function useShield(o,dx,dy,d){
   if(P.invuln>0) return true;
   if(PU.wormhole && P.wormEsc>0){ P.wormEsc--; wormWarp(); return true; }
   if(!(PU.iron>0)) return false;
-  PU.iron--; P.invuln=.4; renderPowers();
+  PU.iron--; P.invuln=.4; renderPowers(); rumble(300,.9);
   setMass(P.m*.85);
   const nx=-dx/d, ny=-dy/d; P.vx=nx*P.r*8; P.vy=ny*P.r*8; P.recover=1.2;
   shake=14; burst(P.x,P.y,40,'#c9d4ff',P.r*9,P.r*.12,.9); ironShock();
@@ -2644,6 +2695,7 @@ let kiloFx=null;
 function kiloReady(){ return PU.kilonova>0 && P.alive && state==='play' && !kiloFx && !(P.kiloCD>0); }
 function kiloBurst(){
   if(!kiloReady()) return;
+  rumble(500,.8);
   const vh=viewHalfDiag();
   kiloFx={t0:t, R:vh*1.05, done:new Set(), dust:[], gain:{}, pts:0, n:0};
   P.kiloCD=KILO_CD; P.invuln=Math.max(P.invuln,KILO_OUT+KILO_IN+.3);
@@ -2766,6 +2818,7 @@ function drawPortal(z,ox,oy){
 }
 function die(cause,line){
   if(!P.alive) return;
+  if(!tut) rumble(450,1);
   if(tut){ if(P.m<startMass) setMass(startMass); tutOuch(); return; }   // no deaths in the tutorial
   clearInput();
   lastCause=cause;
@@ -5194,6 +5247,7 @@ let slowMoT=0, slowMoK=1, hitStop=0;
 function slowMo(sec,k){ slowMoT=Math.max(slowMoT,sec); slowMoK=k; }
 let last=performance.now();
 function frame(now){
+  pollGamepad();
   if(cv.clientWidth && (Math.abs(cv.clientWidth-W)>1 || Math.abs(cv.clientHeight-H)>1)) resize();   // caught a size change late: re-measure so nothing stretches
   requestAnimationFrame(frame);   // keep the loop alive even if a frame throws
   const rawMs=now-last; last=now;
@@ -5415,7 +5469,7 @@ function begin(){
   const hint=$('hint'); hint.style.opacity='1';
   hint.innerHTML = touchUI
     ? '<b>Drag</b> to steer · <b>hold a 2nd finger</b> to brake · <b>double-tap a 2nd finger</b> to boost'
-    : '<b>Arrow keys</b>, <b>WASD</b> or <b>hold left mouse</b> to thrust · <b>hold Space</b> to brake · <b>double-tap Space</b> to boost';
+    : '<b>Arrow keys</b>, <b>WASD</b> or <b>hold left mouse</b> to thrust · <b>hold Space</b> to brake · <b>double-tap Space</b> to boost' + (gp.on?' · 🎮 <b>stick</b> steer · <b>B/LT</b> brake · <b>A/RT</b> boost':'');
   setTimeout(()=>{ hint.style.opacity='0'; },9000);
   dropTutorial();
   if(!botInput && (wantTut || !tutDone())){ wantTut=false; startTutorial(); }
@@ -5427,7 +5481,7 @@ function begin(){
 function setupMenu(){
   const rows = touchUI
     ? [['Drag','Steer: your object (cyan ring) flies the way you drag'],['Hold a 2nd finger','Brake (red screen border)'],['Double-tap a 2nd finger','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Pause button','Pause']]
-    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
+    : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['🎮 Controller','Left stick or D-pad steers · hold B or LT to brake · A or RT to boost · Y for Kilonova · Start to pause'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
   $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join('');
   if(touchUI) document.querySelectorAll('.keyhint').forEach(el=>el.hidden=true);
   $('startBtn').addEventListener('click',()=>withName(()=>playIntro(()=>begin())));
