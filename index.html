@@ -263,6 +263,16 @@ button.ghost.sm{font-size:.68rem;padding:10px 18px;-webkit-backdrop-filter:blur(
 .setRow span{display:block;font-size:.78rem;color:var(--muted);line-height:1.35;margin-top:2px;}
 .setRow span b{display:inline;font-size:inherit;color:var(--stardust);}
 .tog{min-width:64px;flex:none;}
+.bindHead{display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);}
+.bindHead b{font-family:var(--display);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--stardust);font-weight:400;}
+.bindGrid{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;}
+.bindGrid>span{font-size:.86rem;}
+.bindGrid>span small{display:block;font-size:.72rem;color:var(--muted);}
+.bindBtn{font:inherit;font-size:.8rem;min-width:96px;padding:7px 12px;border-radius:10px;cursor:pointer;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);}
+.bindBtn:hover{border-color:rgba(255,214,140,.6);}
+.bindBtn.wait{border-color:#ffd76a;color:#ffd76a;animation:bindPulse 1s ease-in-out infinite;}
+@keyframes bindPulse{50%{background:rgba(255,215,106,.18)}}
+.bindNote{font-size:.74rem;color:var(--muted);line-height:1.4;}
 .seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:4px;border-radius:999px;background:var(--panel);border:1px solid var(--line);margin-top:-4px;}
 .seg button{font:inherit;font-size:.8rem;padding:8px 0;border:0;border-radius:999px;background:none;color:var(--muted);cursor:pointer;transition:background .15s,color .15s;}
 .seg button:hover{color:var(--ink);}
@@ -479,13 +489,14 @@ button.ghost:focus-visible,button.ghost:focus{outline:2px solid var(--stardust);
       <div class="setRow"><div><b>Sound</b><span>Music and sound effects.</span></div><button class="ghost sm tog" id="setSound" type="button">On</button></div>
       <div class="setRow"><div><b>Graphics</b><span id="gfxNote">Auto adjusts to your device. Lower settings run smoother and save battery.</span></div></div>
       <div class="seg" id="gfxSeg" role="radiogroup" aria-label="Graphics quality"><button type="button" data-q="auto" role="radio">Auto</button><button type="button" data-q="high" role="radio">High</button><button type="button" data-q="medium" role="radio">Medium</button><button type="button" data-q="low" role="radio">Low</button></div>
+      <div id="bindBox"></div>
     </div>
     </div>
     <div class="sheet" id="lbSheet" hidden><div class="sheetHead"><b>Leaderboard</b><button class="sheetX" type="button" aria-label="Close">✕</button></div><div class="how" id="lbBox"><div class="lb" id="mLb"></div></div></div>
     <div hidden><div id="howBox"><dl id="ctrlList"></dl></div></div>
     <p class="small keyhint pressKey">Press Space</p>
   </div>
-  <div class="build">Build 41</div>
+  <div class="build">Build 42</div>
 </div>
 
 <div class="overlay" id="nameGate" hidden>
@@ -1653,19 +1664,75 @@ let mouse={x:0,y:0,thrust:false,brake:false};
 const touches = new Map();
 let joy=null, lastTapUp=0, lastActTap=0, actFx=null, boostReq=false, lastSpaceDown=0, spaceBoosted=false;
 const JOY_R=56;
+// ---------- remappable controls ----------
+const KB_DEF={up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',brake:'Space',boost:'',kilo:'KeyE',pause:'KeyP',mute:'KeyM'};
+const GB_DEF={brake:[1,6],boost:[0,7],kilo:[3],pause:[9]};
+const KB_ACTS=[['up','Move up','Arrow keys always work too'],['down','Move down'],['left','Move left'],['right','Move right'],['brake','Brake (hold)','Double-tap it to boost'],['boost','Boost','Optional extra boost key'],['kilo','Kilonova'],['pause','Pause','Esc always works too'],['mute','Mute']];
+const GB_ACTS=[['brake','Brake (hold)'],['boost','Boost'],['kilo','Kilonova'],['pause','Pause']];
+const PAD_NAMES=['A','B','X','Y','LB','RB','LT','RT','Back','Start','L3','R3','D-pad ↑','D-pad ↓','D-pad ←','D-pad →','Home'];
+let KB={...KB_DEF}, GB=JSON.parse(JSON.stringify(GB_DEF)), rebinding=null;
+try{ const v=JSON.parse(localStorage.getItem('stardust.binds')||'null'); if(v){ if(v.kb) Object.assign(KB,v.kb); if(v.gb) Object.assign(GB,v.gb); } }catch(e){}
+function saveBinds(){ try{ localStorage.setItem('stardust.binds',JSON.stringify({kb:KB,gb:GB})); }catch(e){} }
+function keyName(c){
+  if(!c) return '—';
+  const m={Space:'Space',Escape:'Esc',Enter:'Enter',Tab:'Tab',Backspace:'Backspace',ShiftLeft:'L-Shift',ShiftRight:'R-Shift',ControlLeft:'L-Ctrl',ControlRight:'R-Ctrl',AltLeft:'L-Alt',AltRight:'R-Alt',ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',CapsLock:'Caps',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/',Backslash:'\\',BracketLeft:'[',BracketRight:']',Minus:'-',Equal:'=',Backquote:'`'};
+  if(m[c]) return m[c]; if(/^Key[A-Z]$/.test(c)) return c.slice(3); if(/^Digit\d$/.test(c)) return c.slice(5); if(/^Numpad/.test(c)) return 'Num '+c.slice(6);
+  return c;
+}
+const padName=list=>list.length?list.map(i=>PAD_NAMES[i]||('Button '+i)).join(' / '):'—';
+function renderBinds(){
+  const box=$('bindBox'); if(!box) return;
+  let h='';
+  if(!touchUI){
+    h+='<div class="bindHead"><b>⌨️ Keyboard</b><button class="ghost sm" type="button" data-reset="kb">Reset</button></div><div class="bindGrid">';
+    for(const [id,lbl,sub] of KB_ACTS) h+='<span>'+lbl+(sub?'<small>'+sub+'</small>':'')+'</span><button class="bindBtn'+(rebinding&&rebinding.kind==='kb'&&rebinding.id===id?' wait':'')+'" type="button" data-kb="'+id+'">'+(rebinding&&rebinding.kind==='kb'&&rebinding.id===id?'Press a key…':keyName(KB[id]))+'</button>';
+    h+='</div>';
+  }
+  h+='<div class="bindHead"><b>🎮 Controller</b><button class="ghost sm" type="button" data-reset="gb">Reset</button></div><div class="bindGrid">';
+  for(const [id,lbl] of GB_ACTS) h+='<span>'+lbl+'</span><button class="bindBtn'+(rebinding&&rebinding.kind==='gb'&&rebinding.id===id?' wait':'')+'" type="button" data-gb="'+id+'">'+(rebinding&&rebinding.kind==='gb'&&rebinding.id===id?'Press a button…':padName(GB[id]))+'</button>';
+  h+='</div><div class="bindNote">Left stick and D-pad always steer. In menus A selects and B goes back. Click a control, then press the new key or button (Esc cancels). Taking a key that is already used swaps the two.</div>';
+  const f=document.activeElement, fk=f&&f.dataset?(f.dataset.kb?'kb:'+f.dataset.kb:f.dataset.gb?'gb:'+f.dataset.gb:null):null;
+  box.innerHTML=h;
+  if(fk){ const [k,id]=fk.split(':'); const b=box.querySelector('[data-'+k+'="'+id+'"]'); if(b) b.focus({focusVisible:document.body.classList.contains('gpnav')}); }
+}
+function startRebind(kind,id){ rebinding={kind,id,t:performance.now()}; renderBinds(); }
+function endRebind(){ rebinding=null; renderBinds(); refreshHints(); }
+function setKeyBind(id,code){
+  const RES=['Escape','Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'];
+  if(RES.includes(code)){ toast(keyName(code)+' is reserved, pick another key'); return; }
+  const other=Object.keys(KB).find(k=>k!==id && KB[k]===code); if(other) KB[other]=KB[id];   // swap
+  KB[id]=code; saveBinds(); endRebind();
+}
+function setPadBind(id,btn){
+  for(const k in GB) if(k!==id && GB[k].includes(btn)){ GB[k]=GB[k].filter(x=>x!==btn); if(!GB[k].length) GB[k]=GB[id].filter(x=>x!==btn).slice(0,1); }   // swap
+  GB[id]=[btn]; saveBinds(); endRebind();
+}
+addEventListener('click',e=>{
+  const b=e.target.closest && e.target.closest('#bindBox button'); if(!b) return;
+  if(b.dataset.reset==='kb'){ KB={...KB_DEF}; saveBinds(); endRebind(); return; }
+  if(b.dataset.reset==='gb'){ GB=JSON.parse(JSON.stringify(GB_DEF)); saveBinds(); endRebind(); return; }
+  if(b.dataset.kb) startRebind('kb',b.dataset.kb); else if(b.dataset.gb) startRebind('gb',b.dataset.gb);
+});
+addEventListener('keydown',e=>{     // capture the next key while rebinding, before the game sees it
+  if(!rebinding) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if(e.repeat) return;
+  if(e.code==='Escape'){ endRebind(); return; }
+  if(rebinding.kind==='kb') setKeyBind(rebinding.id,e.code);
+},true);
 addEventListener('keydown',e=>{
   if(e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA')) return;   // typing a leaderboard name
   keys[e.code]=true;
   if(state==='intro'){ e.preventDefault(); if(!e.repeat) endIntro(); return; }
   if(state==='ready'){
-    const go=['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'];
+    const go=['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter',KB.up,KB.down,KB.left,KB.right,KB.brake,KB.boost].filter(Boolean);
     if(go.includes(e.code)){ e.preventDefault(); if(e.code==='Space'||e.code==='Enter') keys[e.code]=false; resumeFromReady(); }
     return;
   }
-  if(e.code==='KeyM' && !e.repeat){ audioInit(); setMuted(!muted); }
-  if(e.code==='KeyN' && !e.repeat) skipLevel();
+  if(e.code===KB.mute && !e.repeat){ audioInit(); setMuted(!muted); }
+  if(e.code==='KeyN' && !e.repeat && !Object.values(KB).includes('KeyN')) skipLevel();
   if(e.code==='Escape' && !$('sheetShade').hidden){ closeSheets(); return; }
-  if(e.code==='Escape'){
+  if(e.code==='Escape' || (e.code===KB.pause && (active()||state==='paused'))){
     e.preventDefault();
     if(active()) pauseGame(); else if(state==='paused') resumeGame();
     return;
@@ -1691,12 +1758,13 @@ addEventListener('keydown',e=>{
     if((e.code==='Space'||e.code==='Enter') && !e.repeat){ e.preventDefault(); btns[i].click(); }
     return;
   }
-  if(e.code==='KeyE' && !e.repeat && active()){ e.preventDefault(); kiloBurst(); return; }
-  if(e.code==='Space' || e.code==='Enter'){
+  if(e.code===KB.kilo && !e.repeat && active()){ e.preventDefault(); kiloBurst(); return; }
+  if(active() && KB.boost && e.code===KB.boost){ e.preventDefault(); if(!e.repeat) boostReq=true; return; }
+  if(e.code==='Space' || e.code==='Enter' || e.code===KB.brake){
     e.preventDefault();
-    if(active()){ if(e.code==='Space' && !e.repeat){ const now=performance.now();   // Space: hold to brake, double-tap to boost
+    if(active()){ if(e.code===KB.brake && !e.repeat){ const now=performance.now();   // brake key: hold to brake, double-tap to boost
         if(now-lastSpaceDown<300){ boostReq=true; spaceBoosted=true; lastSpaceDown=0; } else lastSpaceDown=now; } }
-    else if(!e.repeat){
+    else if(!e.repeat && (e.code==='Space'||e.code==='Enter')){
       if(!$('clear').hidden){
         if(!$('pathBtns').hidden){ const a=document.activeElement; if(a===$('pathGas')) choosePath(true); else choosePath(false); }
         else if(!lbPending) continueFromClear();
@@ -1707,9 +1775,9 @@ addEventListener('keydown',e=>{
     }
   }
   if(e.code.startsWith('Arrow')) e.preventDefault();
-  if(e.code==='KeyT' && state==='play') startEvent();   // playtest: trigger the event now
+  if(e.code==='KeyT' && state==='play' && !Object.values(KB).includes('KeyT')) startEvent();   // playtest: trigger the event now
 });
-addEventListener('keyup',e=>{ keys[e.code]=false; if(e.code==='Space') spaceBoosted=false; });
+addEventListener('keyup',e=>{ keys[e.code]=false; if(e.code===KB.brake) spaceBoosted=false; });
 addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; mouse.thrust=mouse.brake=false; touches.clear(); joy=null; });
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
@@ -1785,12 +1853,18 @@ function pollGamepad(){
   let x=pad.axes[0]||0, y=pad.axes[1]||0; const m=Math.hypot(x,y);
   if(m<.2){ x=0; y=0; } else { const k=Math.min(1,(m-.2)/.75); x=x/m*k; y=y/m*k; }
   if(B[14]) x=-1; if(B[15]) x=1; if(B[12]) y=-1; if(B[13]) y=1;
-  gp.ix=x; gp.iy=y; gp.brake=!!(B[1]||B[6]);
+  gp.ix=x; gp.iy=y; gp.brake=GB.brake.some(i=>B[i]);
+  if(rebinding && rebinding.kind==='gb'){   // waiting for a new button in Settings
+    const i=B.findIndex((v,k)=>v && !was[k]);
+    if(i>=0 && performance.now()-rebinding.t>150) setPadBind(rebinding.id,i);
+    gp.prev=B; gp.brake=false; return;
+  }
+  if(rebinding){ gp.prev=B; return; }
   const playing=active() && P.alive;
   if(playing){
-    if(down(0)||down(7)) boostReq=true;
-    if(down(3)) kiloBurst();
-    if(down(9)) gpKey('Escape');
+    if(GB.boost.some(down)) boostReq=true;
+    if(GB.kilo.some(down)) kiloBurst();
+    if(GB.pause.some(down)) gpKey('Escape');
   } else {
     // menus and overlays: the D-pad / stick moves between buttons, A presses, B goes back
     const now=performance.now(), dir = (B[12]||y<-.6)?'ArrowUp':(B[13]||y>.6)?'ArrowDown':(B[14]||x<-.6)?'ArrowLeft':(B[15]||x>.6)?'ArrowRight':null;
@@ -1823,10 +1897,10 @@ addEventListener('gamepadconnected',e=>{ if(state==='play' && !botInput) toast('
 function readInput(){
   if(botInput) return botInput();
   let ix=0,iy=0;
-  if(keys.KeyW||keys.ArrowUp) iy-=1;
-  if(keys.KeyS||keys.ArrowDown) iy+=1;
-  if(keys.KeyA||keys.ArrowLeft) ix-=1;
-  if(keys.KeyD||keys.ArrowRight) ix+=1;
+  if(keys[KB.up]||keys.ArrowUp) iy-=1;
+  if(keys[KB.down]||keys.ArrowDown) iy+=1;
+  if(keys[KB.left]||keys.ArrowLeft) ix-=1;
+  if(keys[KB.right]||keys.ArrowRight) ix+=1;
   let L=Math.hypot(ix,iy); if(L>0){ix/=L;iy/=L;}
   if(mouse.thrust){
     const sx=(P.x-cam.x)*cam.z+W/2, sy=(P.y-cam.y)*cam.z+H/2;
@@ -1840,7 +1914,7 @@ function readInput(){
   if(gp.on && (gp.ix||gp.iy)){ ix=gp.ix; iy=gp.iy; }
   let touchBrake=false; const now=performance.now();
   for(const tt of touches.values()) if(tt.role==='act' && now-tt.t>140) touchBrake=true;   // a held second finger brakes; a quick tap doesn't
-  const braking = (gp.on && gp.brake)||(keys.Space && !spaceBoosted)||keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
+  const braking = (gp.on && gp.brake)||(keys[KB.brake] && !spaceBoosted)||keys.ShiftLeft||keys.ShiftRight||mouse.brake||touchBrake;
   return {ix,iy,braking};
 }
 
@@ -3001,7 +3075,7 @@ function countUp(el,target,ms=900,fmt=v=>Math.round(v).toLocaleString(),prefix='
   requestAnimationFrame(step);
 }
 const SHEETS=['chapSheet','setSheet','lbSheet'];
-function closeSheets(){ for(const id of SHEETS) $(id).hidden=true; $('sheetShade').hidden=true; }
+function closeSheets(){ if(rebinding){ rebinding=null; renderBinds(); } for(const id of SHEETS) $(id).hidden=true; $('sheetShade').hidden=true; }
 function openSheet(id){ const was=!$(id).hidden; closeSheets(); if(!was){ $(id).hidden=false; $('sheetShade').hidden=false; } }
 function updateMenuBest(){ const e=$('menuBest'); if(!e) return; e.hidden=!(best>0); e.textContent='🏆 BEST '+best.toLocaleString(); }
 function saveBest(total){
@@ -3660,7 +3734,7 @@ function reroll(){
 function applyPower(p){
   PU[p.id]=(PU[p.id]||0)+1;
   dryPicks = p.tier>=2 ? 0 : dryPicks+1;
-  if(p.id==='kilonova'){ P.kiloCD=0; if(!botInput) setTimeout(()=>toast('Kilonova ready! Tap the golden button'+(touchUI?'':' or press E')+' to unleash it','gold long'),400); }
+  if(p.id==='kilonova'){ P.kiloCD=0; if(!botInput) setTimeout(()=>toast('Kilonova ready! Tap the golden button'+(touchUI?'':' or press '+keyName(KB.kilo))+' to unleash it','gold long'),400); }
   if(p.id==='wormhole'){ P.wormEsc=1; P.wormT=3; }
   for(const S of SYNERGIES){
     if(!P.synergy[S.id] && S.need.every(has)){ P.synergy[S.id]=true; if(S.id==='dynamo') P.dynamo=true; if(!botInput) setTimeout(()=>toast('Synergy unlocked: '+S.name+'. '+S.desc,'gold long'),300); }
@@ -5475,7 +5549,7 @@ function begin(){
   const hint=$('hint'); hint.style.opacity='1';
   hint.innerHTML = touchUI
     ? '<b>Drag</b> to steer · <b>hold a 2nd finger</b> to brake · <b>double-tap a 2nd finger</b> to boost'
-    : '<b>Arrow keys</b>, <b>WASD</b> or <b>hold left mouse</b> to thrust · <b>hold Space</b> to brake · <b>double-tap Space</b> to boost' + (gp.on?' · 🎮 <b>stick</b> steer · <b>B/LT</b> brake · <b>A/RT</b> boost':'');
+    : '<b>Arrow keys</b>, <b>'+keyName(KB.up)+keyName(KB.left)+keyName(KB.down)+keyName(KB.right)+'</b> or <b>hold left mouse</b> to thrust · <b>hold '+keyName(KB.brake)+'</b> to brake · <b>double-tap '+keyName(KB.brake)+'</b>'+(KB.boost?' or <b>'+keyName(KB.boost)+'</b>':'')+' to boost' + (gp.on?' · 🎮 <b>stick</b> steer · <b>'+padName(GB.brake)+'</b> brake · <b>'+padName(GB.boost)+'</b> boost':'');
   setTimeout(()=>{ hint.style.opacity='0'; },9000);
   dropTutorial();
   if(!botInput && (wantTut || !tutDone())){ wantTut=false; startTutorial(); }
@@ -5484,11 +5558,18 @@ function begin(){
   audioInit();
 }
 
+function refreshHints(){
+  const kb=$('kiloBtn'); if(kb) kb.title='Kilonova ('+keyName(KB.kilo)+')';
+  if(!touchUI){ const rows=[['Arrows / '+keyName(KB.up)+keyName(KB.left)+keyName(KB.down)+keyName(KB.right)+' / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold '+keyName(KB.brake)+' (or Shift / right mouse)','Brake (red screen border)'],['Double-tap '+keyName(KB.brake)+(KB.boost?' or '+keyName(KB.boost):''),'Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],[keyName(KB.kilo),'Kilonova (once you have it)'],['Esc / '+keyName(KB.pause),'Pause'],[keyName(KB.mute),'Mute'],['🎮 Controller','Stick or D-pad steers · '+padName(GB.brake)+' brake · '+padName(GB.boost)+' boost · '+padName(GB.kilo)+' Kilonova · '+padName(GB.pause)+' pause · in menus A selects, B goes back, X rerolls powers'],['Change controls','Settings → Keyboard / Controller']];
+    $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join(''); }
+}
 function setupMenu(){
+  renderBinds();
   const rows = touchUI
     ? [['Drag','Steer: your object (cyan ring) flies the way you drag'],['Hold a 2nd finger','Brake (red screen border)'],['Double-tap a 2nd finger','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Pause button','Pause']]
     : [['WASD / Arrows / hold left mouse','Steer: your object (cyan ring) flies that way'],['Hold Space (or Shift / right mouse)','Brake (red screen border)'],['🎮 Controller','Left stick or D-pad steers · hold B or LT to brake · A or RT to boost · Y for Kilonova · Start to pause · in menus the stick or D-pad moves, A selects, X rerolls powers'],['Double-tap Space','Boost: a burst of speed with a golden trail (yellow border). Costs a little mass'],['Esc','Pause'],['M','Mute']];
   $('ctrlList').innerHTML = rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join('');
+  refreshHints();
   if(touchUI) document.querySelectorAll('.keyhint').forEach(el=>el.hidden=true);
   $('startBtn').addEventListener('click',()=>withName(()=>playIntro(()=>begin())));
   $('kiloBtn').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); kiloBurst(); });
